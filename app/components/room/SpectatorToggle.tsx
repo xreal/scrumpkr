@@ -15,7 +15,7 @@ export function SpectatorToggle({ mode, onToggle }: SpectatorToggleProps) {
         className="sr-only"
       />
       <span
-        className={`flex items-center gap-2 border-2 border-black px-3 py-1.5 font-bold transition-colors ${
+        className={`flex items-center gap-1.5 sm:gap-2 border-2 border-black px-2 sm:px-3 py-1 sm:py-1.5 text-sm sm:text-base font-bold transition-colors ${
           mode === "spectator"
             ? "bg-black text-white"
             : "bg-white text-black hover:bg-gray-100"

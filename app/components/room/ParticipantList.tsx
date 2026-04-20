@@ -18,14 +18,14 @@ export function ParticipantList({
 }: ParticipantListProps) {
   return (
     <div className="border-2 border-black p-4">
-      <div className="flex items-center justify-between border-b-2 border-black pb-2 mb-3">
-        <h3 className="text-lg font-black uppercase tracking-widest">
+      <div className="flex items-center justify-between border-b-2 border-black pb-2 mb-3 gap-2">
+        <h3 className="text-base sm:text-lg font-black uppercase tracking-widest">
           Participants
         </h3>
         <button
           onClick={onOpenRemove}
-          className="flex items-center gap-1 border-2 border-black px-2 py-1 text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
-          title="Remove offline participants"
+          className="flex items-center gap-1 border-2 border-black px-2 py-1 text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors flex-shrink-0"
+          title="Remove participants"
         >
           <UserMinus size={14} />
           -
@@ -65,7 +65,7 @@ export function ParticipantList({
                   </span>
                 )}
               </span>
-              <span className="flex items-center justify-center w-8 h-8 border-2 border-black bg-gray-50 text-sm font-black flex-shrink-0">
+              <span className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 border-2 border-black bg-gray-50 text-xs sm:text-sm font-black flex-shrink-0">
                 {revealed
                   ? vote === "coffee"
                     ? <Coffee size={16} />

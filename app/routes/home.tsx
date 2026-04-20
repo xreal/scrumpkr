@@ -51,12 +51,12 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-black font-sans flex flex-col items-center justify-center p-6 selection:bg-black selection:text-white">
+    <div className="min-h-screen bg-white text-black font-sans flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-black selection:text-white">
       <div className="w-full max-w-md">
-        <h1 className="text-6xl font-black tracking-tighter mb-2">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tighter mb-2">
           scrumpkr.
         </h1>
-        <p className="text-lg font-medium mb-12">
+        <p className="text-base sm:text-lg font-medium mb-8 sm:mb-12">
           Minimalist story point estimation.
         </p>
         <JoinForm onSubmit={handleJoin} lastRoom={lastRoom} onRejoinLast={handleRejoinLast} />

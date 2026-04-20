@@ -23,11 +23,11 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
       <div className="space-y-2">
         <label
           htmlFor="name"
-          className="block text-base font-bold uppercase tracking-widest text-black"
+          className="block text-sm sm:text-base font-bold uppercase tracking-widest text-black"
         >
           Your Name
         </label>
@@ -37,14 +37,14 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Jane Doe"
-          className="w-full border-2 border-black p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
+          className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
           required
         />
       </div>
       <div className="space-y-2">
         <label
           htmlFor="room"
-          className="block text-base font-bold uppercase tracking-widest text-black"
+          className="block text-sm sm:text-base font-bold uppercase tracking-widest text-black"
         >
           Room Code
         </label>
@@ -54,12 +54,12 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
           value={roomCode}
           onChange={(e) => setRoomCode(e.target.value)}
           placeholder="Leave empty for new room"
-          className="w-full border-2 border-black p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
+          className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
         />
       </div>
       <button
         type="submit"
-        className="w-full bg-black text-white text-lg font-bold uppercase tracking-widest py-4 border-2 border-black hover:bg-white hover:text-black transition-all active:translate-y-0.5"
+        className="w-full bg-black text-white text-base sm:text-lg font-bold uppercase tracking-widest py-3 sm:py-4 border-2 border-black hover:bg-white hover:text-black transition-all active:translate-y-0.5"
       >
         {roomCode ? "Join Room" : "Create Room"}
       </button>
@@ -67,7 +67,7 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
         <button
           type="button"
           onClick={() => onRejoinLast(name)}
-          className="w-full border-2 border-black py-3 text-sm font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all"
+          className="w-full border-2 border-black py-2.5 sm:py-3 text-xs sm:text-sm font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all"
         >
           Rejoin last room ({lastRoom})
         </button>

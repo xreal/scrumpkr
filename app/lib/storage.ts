@@ -21,32 +21,18 @@ function setLocal(key: string, value: string): void {
   } catch {}
 }
 
-function getSession(key: string): string | null {
-  try {
-    return sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function setSession(key: string, value: string): void {
-  try {
-    sessionStorage.setItem(key, value);
-  } catch {}
-}
-
 function roomKey(prefix: string, roomId: string): string {
   return `${prefix}${roomId}`;
 }
 
 export function getParticipantId(roomId: string | null): string | null {
   if (!roomId) return null;
-  return getSession(roomKey(KEYS.participantIdByRoom, roomId));
+  return getLocal(roomKey(KEYS.participantIdByRoom, roomId));
 }
 
 export function setParticipantId(roomId: string | null, id: string): void {
   if (!roomId) return;
-  setSession(roomKey(KEYS.participantIdByRoom, roomId), id);
+  setLocal(roomKey(KEYS.participantIdByRoom, roomId), id);
 }
 
 export function getDisplayName(roomId?: string | null): string | null {

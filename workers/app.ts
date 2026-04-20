@@ -311,7 +311,7 @@ export class PokerRoom implements DurableObject {
           const target = this.roomData.participants.find(
             (p) => p.participantId === data.removeId
           );
-          if (!target || target.connected) {
+          if (!target || target.participantId === wsParticipantId) {
             break;
           }
 

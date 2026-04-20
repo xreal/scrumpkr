@@ -18,7 +18,7 @@ export function VoteResult({ participants, votes }: VoteResultProps) {
       <span className="text-base font-black uppercase tracking-widest">
         Average
       </span>
-      <span className="text-2xl font-black bg-black text-white px-3 py-1">
+      <span className="text-xl sm:text-2xl font-black bg-black text-white px-2 sm:px-3 py-1">
         {average}
       </span>
     </div>

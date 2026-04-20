@@ -18,27 +18,27 @@ export function RemoveParticipantsModal({
 }: RemoveParticipantsModalProps) {
   if (!isOpen) return null;
 
-  const removable = participants.filter((p) => p.participantId !== myId && !p.connected);
+  const removable = participants.filter((p) => p.participantId !== myId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white border-2 border-black w-full max-w-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex items-center justify-between border-b-2 border-black p-4">
-          <h3 className="text-lg font-black uppercase tracking-widest">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+      <div className="bg-white border-2 border-black w-full max-w-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex items-center justify-between border-b-2 border-black p-3 sm:p-4">
+          <h3 className="text-base sm:text-lg font-black uppercase tracking-widest">
             Remove Participants
           </h3>
           <button
             onClick={onClose}
-            className="hover:opacity-60 transition-opacity"
+            className="hover:opacity-60 transition-opacity flex-shrink-0"
             title="Close"
           >
             <X size={20} strokeWidth={3} />
           </button>
         </div>
-        <div className="p-4">
+        <div className="p-3 sm:p-4">
           {removable.length === 0 ? (
             <p className="text-sm text-gray-500 font-medium">
-              No offline participants to remove.
+              No participants available to remove.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -47,7 +47,9 @@ export function RemoveParticipantsModal({
                   key={p.participantId}
                   className="flex items-center justify-between gap-3"
                 >
-                  <span className="text-sm font-bold truncate">{p.name}</span>
+                  <span className="text-sm font-bold truncate">
+                    {p.name} {!p.connected ? "(Offline)" : ""}
+                  </span>
                   <button
                     onClick={() => {
                       onRemove(p.participantId);

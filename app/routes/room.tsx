@@ -176,9 +176,9 @@ export default function Room() {
   if (identityLoaded && !nameConfirmed) {
     return (
       <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center p-6 selection:bg-black selection:text-white">
-        <div className="w-full max-w-md border-2 border-black p-6">
-          <h1 className="text-2xl font-black tracking-tight mb-2">Join room</h1>
-          <p className="text-base font-medium mb-4">
+        <div className="w-full max-w-md border-2 border-black p-4 sm:p-6">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-2">Join room</h1>
+          <p className="text-sm sm:text-base font-medium mb-4">
             Enter your name before joining this planning session.
           </p>
           <form onSubmit={handleConfirmName} className="space-y-4">
@@ -194,13 +194,13 @@ export default function Room() {
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               placeholder="e.g. Jane Doe"
-              className="w-full border-2 border-black p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
+              className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
               required
               autoFocus
             />
             <button
               type="submit"
-              className="w-full bg-black text-white text-base font-bold uppercase tracking-widest py-3 border-2 border-black hover:bg-white hover:text-black transition-all"
+              className="w-full bg-black text-white text-base font-bold uppercase tracking-widest py-2.5 sm:py-3 border-2 border-black hover:bg-white hover:text-black transition-all"
             >
               Join Room
             </button>
@@ -222,13 +222,13 @@ export default function Room() {
       <main className="max-w-6xl mx-auto p-4 mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-black uppercase tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
               Your Estimate
             </h2>
             <SpectatorToggle mode={me?.mode || mode} onToggle={handleSetMode} />
           </div>
           {(me?.mode || mode) === "voter" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="grid grid-cols-5 gap-2 sm:gap-3">
               {DECK.map((card) => (
                 <VotingCard
                   key={card}

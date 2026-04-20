@@ -19,8 +19,8 @@ export function RevealHistory({ history }: RevealHistoryProps) {
   if (history.length === 0) return null;
 
   return (
-    <div className="border-2 border-black p-4">
-      <h3 className="text-lg font-black uppercase tracking-widest border-b-2 border-black pb-2 mb-3">
+    <div className="border-2 border-black p-3 sm:p-4">
+      <h3 className="text-base sm:text-lg font-black uppercase tracking-widest border-b-2 border-black pb-2 mb-3">
         History
       </h3>
       <ul className="space-y-2">
