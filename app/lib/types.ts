@@ -41,7 +41,9 @@ export interface ServerMessage {
   type: "room_state" | "error";
   room: Room;
   error?: string;
-  yourId: string;
+  yourId?: string;
+  yourVote?: string | null;
+  yourToken?: string;
 }
 
 export type RoomId = string;

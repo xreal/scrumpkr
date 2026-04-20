@@ -3,6 +3,8 @@ import type { Room, ServerMessage } from "~/lib/types";
 import {
   getParticipantId,
   setParticipantId,
+  getParticipantToken,
+  setParticipantToken,
   setLastRoom,
 } from "~/lib/storage";
 
@@ -24,8 +26,17 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
     if (!roomId) return;
 
     const storedId = getParticipantId(roomId);
+    const storedToken = getParticipantToken(roomId);
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/ws/${roomId}${storedId ? `?participantId=${storedId}` : ""}`;
+    const params = new URLSearchParams();
+    if (storedId) {
+      params.set("participantId", storedId);
+    }
+    if (storedToken) {
+      params.set("token", storedToken);
+    }
+    const query = params.toString();
+    const url = `${protocol}//${window.location.host}/ws/${roomId}${query ? `?${query}` : ""}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -39,6 +50,9 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
         if (msg.yourId) {
           setMyId(msg.yourId);
           setParticipantId(roomId, msg.yourId);
+        }
+        if (msg.yourToken) {
+          setParticipantToken(roomId, msg.yourToken);
         }
         setLastRoom(roomId);
       }

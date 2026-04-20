@@ -81,9 +81,9 @@ export default function Room() {
   useEffect(() => {
     if (room?.currentRound.votes && myId) {
       const vote = room.currentRound.votes[myId];
-      if (vote === "hidden" || vote === null) {
+      if (vote === null || vote === undefined) {
         setMyVote(null);
-      } else {
+      } else if (vote !== "hidden") {
         setMyVote(vote);
       }
     }

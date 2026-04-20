@@ -1,5 +1,6 @@
 const KEYS = {
   participantIdByRoom: "scrumpkr:room:participantId:",
+  participantTokenByRoom: "scrumpkr:room:participantToken:",
   displayNameByRoom: "scrumpkr:room:displayName:",
   preferredModeByRoom: "scrumpkr:room:preferredMode:",
   displayName: "scrumpkr:displayName",
@@ -33,6 +34,16 @@ export function getParticipantId(roomId: string | null): string | null {
 export function setParticipantId(roomId: string | null, id: string): void {
   if (!roomId) return;
   setLocal(roomKey(KEYS.participantIdByRoom, roomId), id);
+}
+
+export function getParticipantToken(roomId: string | null): string | null {
+  if (!roomId) return null;
+  return getLocal(roomKey(KEYS.participantTokenByRoom, roomId));
+}
+
+export function setParticipantToken(roomId: string | null, token: string): void {
+  if (!roomId) return;
+  setLocal(roomKey(KEYS.participantTokenByRoom, roomId), token);
 }
 
 export function getDisplayName(roomId?: string | null): string | null {

@@ -106,8 +106,9 @@ export class PokerRoom implements DurableObject {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
 
-      const participantId =
+      let participantId =
         url.searchParams.get("participantId") || crypto.randomUUID();
+      let participantToken = url.searchParams.get("token") || "";
       const roomIdFromPath = url.pathname.startsWith("/ws/")
         ? url.pathname.slice("/ws/".length)
         : "";
@@ -128,9 +129,20 @@ export class PokerRoom implements DurableObject {
           (p) => p.participantId === participantId
         );
         if (existing) {
-          existing.connected = true;
-          existing.lastSeenAt = Date.now();
-          changed = true;
+          if (existing.authToken && existing.authToken !== participantToken) {
+            participantId = crypto.randomUUID();
+            participantToken = crypto.randomUUID();
+          } else {
+            existing.connected = true;
+            existing.lastSeenAt = Date.now();
+            if (!existing.authToken) {
+              existing.authToken = participantToken || crypto.randomUUID();
+            }
+            participantToken = existing.authToken;
+            changed = true;
+          }
+        } else if (!participantToken) {
+          participantToken = crypto.randomUUID();
         }
 
         if (this.pruneInactiveParticipants(Date.now())) {
@@ -143,12 +155,14 @@ export class PokerRoom implements DurableObject {
         }
       });
 
-      this.state.acceptWebSocket(server, [participantId]);
+      this.state.acceptWebSocket(server, [participantId, participantToken]);
       server.send(
         JSON.stringify({
           type: "room_state",
-          room: this.sanitizedRoom(),
+          room: this.sanitizedRoomForParticipant(participantId),
           yourId: participantId,
+          yourVote: this.getParticipantVote(participantId),
+          yourToken: participantToken,
         })
       );
       this.broadcastRoomState();
@@ -189,7 +203,7 @@ export class PokerRoom implements DurableObject {
       return;
     }
 
-    const wsParticipantId = this.state.getTags(ws)[0];
+    const [wsParticipantId, wsParticipantToken] = this.state.getTags(ws);
     if (!wsParticipantId) {
       ws.close(1008, "Missing participant identity");
       return;
@@ -230,14 +244,22 @@ export class PokerRoom implements DurableObject {
             mode: data.mode || "voter",
             connected: true,
             lastSeenAt: Date.now(),
+            authToken: wsParticipantToken || crypto.randomUUID(),
           });
           this.roomData.currentRound.votes[wsParticipantId] = null;
           changed = true;
         } else {
+          if (existing.authToken && existing.authToken !== wsParticipantToken) {
+            ws.send(JSON.stringify({ type: "error", error: "Auth mismatch" }));
+            break;
+          }
           existing.connected = true;
           existing.lastSeenAt = Date.now();
           if (name) existing.name = name;
           if (data.mode) existing.mode = data.mode;
+          if (!existing.authToken) {
+            existing.authToken = wsParticipantToken || crypto.randomUUID();
+          }
           changed = true;
         }
         break;
@@ -378,10 +400,17 @@ export class PokerRoom implements DurableObject {
   }
 
   private broadcastRoomState() {
-    const msg = JSON.stringify({ type: "room_state", room: this.sanitizedRoom() });
     for (const ws of this.state.getWebSockets()) {
       try {
-        ws.send(msg);
+        const participantId = this.state.getTags(ws)[0];
+        ws.send(
+          JSON.stringify({
+            type: "room_state",
+            room: this.sanitizedRoomForParticipant(participantId),
+            yourVote: this.getParticipantVote(participantId),
+            yourToken: this.getParticipantToken(participantId),
+          })
+        );
       } catch {
         ws.close(1011, "Broadcast failed");
       }
@@ -415,19 +444,44 @@ export class PokerRoom implements DurableObject {
     return true;
   }
 
-  private sanitizedRoom(): RoomData {
+  private sanitizedRoomForParticipant(participantId?: string): RoomData {
     const votes = { ...this.roomData.currentRound.votes };
     if (!this.roomData.currentRound.revealed) {
       for (const key of Object.keys(votes)) {
-        if (votes[key] !== null) {
+        if (key !== participantId && votes[key] !== null) {
           votes[key] = "hidden" as string | null;
         }
       }
     }
     return {
       ...this.roomData,
+      participants: this.roomData.participants.map((participant) => ({
+        participantId: participant.participantId,
+        name: participant.name,
+        role: participant.role,
+        mode: participant.mode,
+        connected: participant.connected,
+        lastSeenAt: participant.lastSeenAt,
+      })),
       currentRound: { ...this.roomData.currentRound, votes },
     };
+  }
+
+  private getParticipantVote(participantId?: string): string | null {
+    if (!participantId) {
+      return null;
+    }
+    return this.roomData.currentRound.votes[participantId] ?? null;
+  }
+
+  private getParticipantToken(participantId?: string): string | null {
+    if (!participantId) {
+      return null;
+    }
+    return (
+      this.roomData.participants.find((participant) => participant.participantId === participantId)
+        ?.authToken ?? null
+    );
   }
 
   private async loadFromStorage() {
@@ -459,6 +513,7 @@ interface ParticipantData {
   mode: "voter" | "spectator";
   connected: boolean;
   lastSeenAt: number;
+  authToken?: string;
 }
 
 interface RoundData {
