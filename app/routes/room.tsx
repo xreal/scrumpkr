@@ -6,6 +6,7 @@ import { VoteResult } from "~/components/room/VoteResult";
 import { RevealHistory } from "~/components/room/RevealHistory";
 import { RoomHeader } from "~/components/room/RoomHeader";
 import { SpectatorToggle } from "~/components/room/SpectatorToggle";
+import { RemoveParticipantsModal } from "~/components/room/RemoveParticipantsModal";
 import { useWebSocket } from "~/hooks/useWebSocket";
 import {
   getDisplayName,
@@ -27,6 +28,7 @@ export default function Room() {
   const [mode, setMode] = useState<"voter" | "spectator">("voter");
   const [myVote, setMyVote] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
 
   useEffect(() => {
     setIdentityLoaded(false);
@@ -160,7 +162,7 @@ export default function Room() {
   if (!room) {
     return (
       <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center">
-        <p className="text-2xl font-bold">
+        <p className="text-xl font-bold">
           {connected ? "Loading room..." : "Connecting..."}
         </p>
       </div>
@@ -174,15 +176,15 @@ export default function Room() {
   if (identityLoaded && !nameConfirmed) {
     return (
       <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center p-6 selection:bg-black selection:text-white">
-        <div className="w-full max-w-md border-4 border-black p-8">
-          <h1 className="text-4xl font-black tracking-tight mb-3">Join room</h1>
-          <p className="text-lg font-medium mb-6">
+        <div className="w-full max-w-md border-2 border-black p-6">
+          <h1 className="text-2xl font-black tracking-tight mb-2">Join room</h1>
+          <p className="text-base font-medium mb-4">
             Enter your name before joining this planning session.
           </p>
           <form onSubmit={handleConfirmName} className="space-y-4">
             <label
               htmlFor="room-name"
-              className="block text-sm font-bold uppercase tracking-widest"
+              className="block text-xs font-bold uppercase tracking-widest"
             >
               Your Name
             </label>
@@ -192,13 +194,13 @@ export default function Room() {
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               placeholder="e.g. Jane Doe"
-              className="w-full border-4 border-black p-4 text-xl font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
+              className="w-full border-2 border-black p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
               required
               autoFocus
             />
             <button
               type="submit"
-              className="w-full bg-black text-white text-xl font-bold uppercase tracking-widest py-4 border-4 border-black hover:bg-white hover:text-black transition-all"
+              className="w-full bg-black text-white text-base font-bold uppercase tracking-widest py-3 border-2 border-black hover:bg-white hover:text-black transition-all"
             >
               Join Room
             </button>
@@ -209,7 +211,7 @@ export default function Room() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black font-sans selection:bg-black selection:text-white pb-20">
+    <div className="min-h-screen bg-white text-black font-sans selection:bg-black selection:text-white pb-12">
       <RoomHeader
         title={room.title}
         roomId={roomId || ""}
@@ -217,16 +219,16 @@ export default function Room() {
         onLeave={handleLeave}
         onSetTitle={handleSetTitle}
       />
-      <main className="max-w-6xl mx-auto p-6 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-16">
-        <div className="lg:col-span-2 space-y-8">
+      <main className="max-w-6xl mx-auto p-4 mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-4xl font-black uppercase tracking-tight">
+            <h2 className="text-2xl font-black uppercase tracking-tight">
               Your Estimate
             </h2>
             <SpectatorToggle mode={me?.mode || mode} onToggle={handleSetMode} />
           </div>
           {(me?.mode || mode) === "voter" ? (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {DECK.map((card) => (
                 <VotingCard
                   key={card}
@@ -238,12 +240,12 @@ export default function Room() {
               ))}
             </div>
           ) : (
-            <p className="text-xl font-medium text-gray-500">
+            <p className="text-base font-medium text-gray-500">
               You are watching as a spectator.
             </p>
           )}
         </div>
-        <div className="space-y-8">
+        <div className="space-y-4">
           <ActionControls
             revealed={room.currentRound.revealed}
             onReveal={handleReveal}
@@ -255,7 +257,7 @@ export default function Room() {
             revealed={room.currentRound.revealed}
             votes={room.currentRound.votes}
             myId={myId}
-            onRemove={handleRemoveParticipant}
+            onOpenRemove={() => setRemoveModalOpen(true)}
           />
           {room.currentRound.revealed && (
             <VoteResult
@@ -266,6 +268,13 @@ export default function Room() {
           <RevealHistory history={room.history} />
         </div>
       </main>
+      <RemoveParticipantsModal
+        isOpen={removeModalOpen}
+        onClose={() => setRemoveModalOpen(false)}
+        participants={room.participants}
+        myId={myId}
+        onRemove={handleRemoveParticipant}
+      />
     </div>
   );
 }

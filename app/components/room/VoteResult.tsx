@@ -14,11 +14,11 @@ export function VoteResult({ participants, votes }: VoteResultProps) {
   const average = computeAverage(voterVotes);
 
   return (
-    <div className="mt-8 pt-6 border-t-4 border-black flex justify-between items-center">
-      <span className="text-xl font-black uppercase tracking-widest">
+    <div className="mt-4 pt-4 border-t-2 border-black flex justify-between items-center">
+      <span className="text-base font-black uppercase tracking-widest">
         Average
       </span>
-      <span className="text-4xl font-black bg-black text-white px-4 py-2">
+      <span className="text-2xl font-black bg-black text-white px-3 py-1">
         {average}
       </span>
     </div>

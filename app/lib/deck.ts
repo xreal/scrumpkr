@@ -1,17 +1,14 @@
 export const DECK = [
   "0",
-  "0.5",
   "1",
   "2",
   "3",
   "5",
   "8",
   "13",
-  "20",
-  "40",
-  "100",
-  "?",
+  "21",
   "coffee",
+  "?",
 ] as const;
 
 export type CardValue = (typeof DECK)[number];

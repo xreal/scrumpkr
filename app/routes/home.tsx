@@ -1,5 +1,5 @@
 import { JoinForm } from "~/components/landing/JoinForm";
-import { setDisplayName, setLastRoom } from "~/lib/storage";
+import { setDisplayName, setLastRoom, getLastRoom } from "~/lib/storage";
 import { useNavigate } from "react-router";
 import type { Route } from "./+types/home";
 
@@ -12,6 +12,7 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   const navigate = useNavigate();
+  const lastRoom = getLastRoom();
 
   const handleJoin = async (name: string, existingRoomId?: string) => {
     const trimmedName = name.trim();
@@ -40,6 +41,15 @@ export default function Home() {
     }
   };
 
+  const handleRejoinLast = (name: string) => {
+    if (!lastRoom) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    setDisplayName(trimmedName, lastRoom);
+    setLastRoom(lastRoom);
+    navigate(`/room/${lastRoom}`);
+  };
+
   return (
     <div className="min-h-screen bg-white text-black font-sans flex flex-col items-center justify-center p-6 selection:bg-black selection:text-white">
       <div className="w-full max-w-md">
@@ -49,7 +59,7 @@ export default function Home() {
         <p className="text-lg font-medium mb-12">
           Minimalist story point estimation.
         </p>
-        <JoinForm onSubmit={handleJoin} />
+        <JoinForm onSubmit={handleJoin} lastRoom={lastRoom} onRejoinLast={handleRejoinLast} />
       </div>
     </div>
   );

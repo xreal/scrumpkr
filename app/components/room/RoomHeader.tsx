@@ -13,10 +13,16 @@ export function RoomHeader({ title, roomId, userName, onLeave, onSetTitle }: Roo
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/room/${roomId}` : "";
 
   return (
-    <header className="border-b-4 border-black p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <header className="border-b-2 border-black p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div className="flex items-center gap-4">
-        <h1 className="text-3xl font-black tracking-tighter">scrumpkr.</h1>
-        <div className="h-8 w-1 bg-black hidden sm:block" />
+        <button
+          onClick={onLeave}
+          className="text-2xl font-black tracking-tighter hover:opacity-60 transition-opacity"
+          title="Back to startpage"
+        >
+          scrumpkr.
+        </button>
+        <div className="h-6 w-0.5 bg-black hidden sm:block" />
         <div className="flex items-center gap-2 border-2 border-black px-3 py-1 font-bold">
           <input
             type="text"
@@ -29,12 +35,12 @@ export function RoomHeader({ title, roomId, userName, onLeave, onSetTitle }: Roo
         </div>
       </div>
       <div className="flex items-center gap-4 font-bold">
-        <span className="uppercase tracking-widest">{userName}</span>
+        <span className="uppercase tracking-widest text-sm">{userName}</span>
         <button
           onClick={onLeave}
-          className="flex items-center gap-2 border-2 border-black px-4 py-2 hover:bg-black hover:text-white transition-colors"
+          className="flex items-center gap-2 border-2 border-black px-3 py-1.5 text-sm hover:bg-black hover:text-white transition-colors"
         >
-          <LogOut size={18} />
+          <LogOut size={16} />
           Leave
         </button>
       </div>

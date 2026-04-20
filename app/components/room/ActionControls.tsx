@@ -13,9 +13,9 @@ export function ActionControls({ revealed, onReveal, onReset, hasVotes }: Action
       <button
         onClick={onReveal}
         disabled={!hasVotes}
-        className="w-full flex items-center justify-center gap-3 bg-black text-white text-2xl font-bold uppercase tracking-widest py-6 border-4 border-black hover:bg-white hover:text-black transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none disabled:opacity-40 disabled:pointer-events-none"
+        className="w-full flex items-center justify-center gap-2 bg-black text-white text-lg font-bold uppercase tracking-widest py-3 border-2 border-black hover:bg-white hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-1 hover:translate-y-1 hover:shadow-none disabled:opacity-40 disabled:pointer-events-none"
       >
-        <Eye size={28} />
+        <Eye size={20} />
         Reveal
       </button>
     );
@@ -24,9 +24,9 @@ export function ActionControls({ revealed, onReveal, onReset, hasVotes }: Action
   return (
     <button
       onClick={onReset}
-      className="w-full flex items-center justify-center gap-3 bg-white text-black text-2xl font-bold uppercase tracking-widest py-6 border-4 border-black transition-all shadow-[6px_6px_0px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+      className="w-full flex items-center justify-center gap-2 bg-white text-black text-lg font-bold uppercase tracking-widest py-3 border-2 border-black transition-all shadow-[4px_4px_0px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
     >
-      <RefreshCw size={28} />
+      <RefreshCw size={20} />
       New Round
     </button>
   );

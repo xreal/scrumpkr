@@ -19,13 +19,13 @@ export function RevealHistory({ history }: RevealHistoryProps) {
   if (history.length === 0) return null;
 
   return (
-    <div className="border-4 border-black p-6">
-      <h3 className="text-2xl font-black uppercase tracking-widest border-b-4 border-black pb-4 mb-4">
+    <div className="border-2 border-black p-4">
+      <h3 className="text-lg font-black uppercase tracking-widest border-b-2 border-black pb-2 mb-3">
         History
       </h3>
-      <ul className="space-y-3">
+      <ul className="space-y-2">
         {history.map((entry, i) => (
-          <li key={i} className="flex justify-between items-center font-medium">
+          <li key={i} className="flex justify-between items-center text-sm font-medium">
             <span className="text-gray-500">{timeAgo(entry.timestamp)}</span>
             <span className="font-bold">{entry.aggregation}</span>
           </li>
