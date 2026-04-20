@@ -217,6 +217,7 @@ export default function Room() {
         roomId={roomId || ""}
         userName={me?.name || name}
         onLeave={handleLeave}
+        onSetName={handleSetName}
         onSetTitle={handleSetTitle}
       />
       <main className="max-w-6xl mx-auto p-4 mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
