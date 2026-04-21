@@ -1,6 +1,7 @@
 import { JoinForm } from "~/components/landing/JoinForm";
 import { setDisplayName, setLastRoom, getLastRoom } from "~/lib/storage";
 import { useNavigate } from "react-router";
+import { Github } from "lucide-react";
 import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
@@ -60,6 +61,21 @@ export default function Home() {
           Minimalist story point estimation.
         </p>
         <JoinForm onSubmit={handleJoin} lastRoom={lastRoom} onRejoinLast={handleRejoinLast} />
+        <div className="mt-8 sm:mt-12 flex flex-col items-center gap-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+            No Tracker · No Personal Data · No Ads
+          </p>
+          <a
+            href="https://github.com/xreal/scrumpkr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-black hover:text-gray-600 transition-colors"
+            aria-label="View source on GitHub"
+          >
+            <Github className="w-5 h-5" />
+            GitHub
+          </a>
+        </div>
       </div>
     </div>
   );
