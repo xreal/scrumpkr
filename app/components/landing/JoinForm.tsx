@@ -5,9 +5,17 @@ interface JoinFormProps {
   onSubmit: (name: string, roomId?: string) => void;
   lastRoom?: string | null;
   onRejoinLast?: (name: string) => void;
+  errorMessage?: string | null;
+  onClearError?: () => void;
 }
 
-export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
+export function JoinForm({
+  onSubmit,
+  lastRoom,
+  onRejoinLast,
+  errorMessage,
+  onClearError,
+}: JoinFormProps) {
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
 
@@ -19,6 +27,7 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    onClearError?.();
     onSubmit(name.trim(), roomCode.trim() || undefined);
   };
 
@@ -35,7 +44,10 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
           id="name"
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            onClearError?.();
+            setName(e.target.value);
+          }}
           placeholder="e.g. Jane Doe"
           className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
           required
@@ -52,10 +64,18 @@ export function JoinForm({ onSubmit, lastRoom, onRejoinLast }: JoinFormProps) {
           id="room"
           type="text"
           value={roomCode}
-          onChange={(e) => setRoomCode(e.target.value)}
+          onChange={(e) => {
+            onClearError?.();
+            setRoomCode(e.target.value);
+          }}
           placeholder="Leave empty for new room"
           className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
         />
+        {errorMessage && (
+          <p className="text-sm font-semibold text-red-600" role="alert">
+            {errorMessage}
+          </p>
+        )}
       </div>
       <button
         type="submit"

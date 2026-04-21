@@ -84,4 +84,26 @@ describe("JoinForm", () => {
     fireEvent.click(screen.getByText(/rejoin last room/i));
     expect(onRejoinLast).toHaveBeenCalledWith("Eve");
   });
+
+  it("shows error message and clears it on input changes", () => {
+    const onClearError = vi.fn();
+    render(
+      <JoinForm
+        {...defaultProps}
+        errorMessage="Room not found."
+        onClearError={onClearError}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Room not found.");
+
+    fireEvent.change(screen.getByPlaceholderText(/jane doe/i), {
+      target: { value: "Alice" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/leave empty/i), {
+      target: { value: "ROOM123" },
+    });
+
+    expect(onClearError).toHaveBeenCalledTimes(2);
+  });
 });

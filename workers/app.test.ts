@@ -17,6 +17,28 @@ describe("Worker API", () => {
     expect(json.roomId.length).toBeGreaterThan(0);
     expect(response.headers.get("X-Room-Id")).toBe(json.roomId);
   });
+
+  it("returns exists=true only for already created rooms", async () => {
+    const createRequest = new Request("http://test/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Sprint 42" }),
+    });
+    const createResponse = await exports.default.fetch(createRequest);
+    const created = (await createResponse.json()) as { roomId: string };
+
+    const existingRequest = new Request(
+      `http://test/api/rooms/exists?roomId=${created.roomId}`
+    );
+    const existingResponse = await exports.default.fetch(existingRequest);
+    expect(existingResponse.status).toBe(200);
+    await expect(existingResponse.json()).resolves.toEqual({ exists: true });
+
+    const missingRequest = new Request("http://test/api/rooms/exists?roomId=foo");
+    const missingResponse = await exports.default.fetch(missingRequest);
+    expect(missingResponse.status).toBe(200);
+    await expect(missingResponse.json()).resolves.toEqual({ exists: false });
+  });
 });
 
 describe("PokerRoom Durable Object", () => {

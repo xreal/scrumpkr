@@ -1,7 +1,12 @@
 import { JoinForm } from "~/components/landing/JoinForm";
 import { setDisplayName, setLastRoom, getLastRoom } from "~/lib/storage";
-import { useNavigate } from "react-router";
+import {
+  ROOM_NOT_FOUND_MESSAGE,
+  getJoinErrorMessageFromSearch,
+} from "~/lib/room-join";
+import { useNavigate, useLocation } from "react-router";
 import { Github } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
@@ -13,7 +18,13 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   const navigate = useNavigate();
+  const location = useLocation();
   const lastRoom = getLastRoom();
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setJoinError(getJoinErrorMessageFromSearch(location.search));
+  }, [location.search]);
 
   const handleJoin = async (name: string, existingRoomId?: string) => {
     const trimmedName = name.trim();
@@ -23,11 +34,30 @@ export default function Home() {
 
     if (existingRoomId) {
       const roomId = existingRoomId.trim();
+      if (!roomId) return;
+
+      const existsResponse = await fetch(
+        `/api/rooms/exists?roomId=${encodeURIComponent(roomId)}`
+      );
+      if (!existsResponse.ok) {
+        setJoinError(ROOM_NOT_FOUND_MESSAGE);
+        return;
+      }
+
+      const payload = (await existsResponse.json()) as { exists?: boolean };
+      if (!payload.exists) {
+        setJoinError(ROOM_NOT_FOUND_MESSAGE);
+        return;
+      }
+
+      setJoinError(null);
       setDisplayName(trimmedName, roomId);
       setLastRoom(roomId);
       navigate(`/room/${roomId}`);
       return;
     }
+
+    setJoinError(null);
 
     const res = await fetch("/api/rooms", {
       method: "POST",
@@ -60,7 +90,13 @@ export default function Home() {
         <p className="text-base sm:text-lg font-medium mb-8 sm:mb-12">
           Minimalist story point estimation.
         </p>
-        <JoinForm onSubmit={handleJoin} lastRoom={lastRoom} onRejoinLast={handleRejoinLast} />
+        <JoinForm
+          onSubmit={handleJoin}
+          lastRoom={lastRoom}
+          onRejoinLast={handleRejoinLast}
+          errorMessage={joinError}
+          onClearError={() => setJoinError(null)}
+        />
         <div className="mt-8 sm:mt-12 flex flex-col items-center gap-4">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
             No Tracker · No Personal Data · No Ads

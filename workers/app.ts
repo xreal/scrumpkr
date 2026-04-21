@@ -45,6 +45,20 @@ export default {
       });
     }
 
+    if (url.pathname === "/api/rooms/exists" && request.method === "GET") {
+      const roomId = url.searchParams.get("roomId")?.trim();
+      if (!roomId) {
+        return new Response(JSON.stringify({ exists: false }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      const id = env.POKER_ROOM.idFromName(roomId);
+      const stub = env.POKER_ROOM.get(id);
+      return stub.fetch(request);
+    }
+
     return requestHandler(request, {
       cloudflare: { env, ctx },
     });
@@ -93,29 +107,48 @@ export class PokerRoom implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const roomIdFromPath = url.pathname.startsWith("/ws/")
+      ? url.pathname.slice("/ws/".length)
+      : "";
+
+    if (url.pathname === "/api/rooms/exists" && request.method === "GET") {
+      await this.state.blockConcurrencyWhile(async () => {
+        await this.loadFromStorage();
+      });
+
+      const requestedRoomId = url.searchParams.get("roomId")?.trim();
+      const exists =
+        !!requestedRoomId &&
+        this.roomData.createdAt > 0 &&
+        this.roomData.roomId === requestedRoomId;
+
+      return new Response(JSON.stringify({ exists }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     if (request.headers.get("Upgrade") === "websocket") {
+      await this.state.blockConcurrencyWhile(async () => {
+        await this.loadFromStorage();
+      });
+
+      if (
+        !roomIdFromPath ||
+        this.roomData.createdAt === 0 ||
+        this.roomData.roomId !== roomIdFromPath
+      ) {
+        return new Response("Room not found", { status: 404 });
+      }
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
 
       let participantId =
         url.searchParams.get("participantId") || crypto.randomUUID();
       let participantToken = url.searchParams.get("token") || "";
-      const roomIdFromPath = url.pathname.startsWith("/ws/")
-        ? url.pathname.slice("/ws/".length)
-        : "";
 
       await this.state.blockConcurrencyWhile(async () => {
-        await this.loadFromStorage();
         let changed = false;
-        if (roomIdFromPath && !this.roomData.roomId) {
-          this.roomData.roomId = roomIdFromPath;
-          changed = true;
-        }
-        if (this.roomData.createdAt === 0) {
-          this.roomData.createdAt = Date.now();
-          changed = true;
-        }
 
         const existing = this.roomData.participants.find(
           (p) => p.participantId === participantId
@@ -527,5 +560,4 @@ interface ClientMessage {
   vote?: string | null;
   removeId?: string;
 }
-
 

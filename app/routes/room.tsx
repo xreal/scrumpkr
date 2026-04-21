@@ -14,13 +14,17 @@ import {
   getPreferredMode,
   setPreferredMode,
 } from "~/lib/storage";
+import { roomNotFoundRedirectPath } from "~/lib/room-join";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 
 export default function Room() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { room, connected, myId, send } = useWebSocket(roomId || null);
+  const [roomExists, setRoomExists] = useState<boolean | null>(null);
+  const { room, connected, myId, send } = useWebSocket(
+    roomExists ? roomId || null : null
+  );
   const [name, setName] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [identityLoaded, setIdentityLoaded] = useState(false);
@@ -29,6 +33,51 @@ export default function Room() {
   const [myVote, setMyVote] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const checkRoomExists = async () => {
+      const trimmedRoomId = roomId?.trim();
+      if (!trimmedRoomId) {
+        navigate(roomNotFoundRedirectPath(), { replace: true });
+        return;
+      }
+
+      setRoomExists(null);
+      try {
+        const response = await fetch(
+          `/api/rooms/exists?roomId=${encodeURIComponent(trimmedRoomId)}`
+        );
+
+        if (!response.ok) {
+          throw new Error("room lookup failed");
+        }
+
+        const payload = (await response.json()) as { exists?: boolean };
+        if (!active) {
+          return;
+        }
+
+        if (!payload.exists) {
+          navigate(roomNotFoundRedirectPath(), { replace: true });
+          return;
+        }
+
+        setRoomExists(true);
+      } catch {
+        if (!active) {
+          return;
+        }
+        navigate(roomNotFoundRedirectPath(), { replace: true });
+      }
+    };
+
+    void checkRoomExists();
+    return () => {
+      active = false;
+    };
+  }, [roomId, navigate]);
 
   useEffect(() => {
     setIdentityLoaded(false);
@@ -159,7 +208,7 @@ export default function Room() {
     setNameInput(me.name);
   }, [me?.name]);
 
-  if (!room) {
+  if (roomExists !== true || !room) {
     return (
       <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center">
         <p className="text-xl font-bold">
