@@ -1,105 +1,105 @@
-import { DECK, type CardValue } from "~/lib/deck";
-import { VotingCard } from "~/components/room/VotingCard";
-import { ParticipantList } from "~/components/room/ParticipantList";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useNavigate, useParams } from "react-router";
 import { ActionControls } from "~/components/room/ActionControls";
-import { VoteResult } from "~/components/room/VoteResult";
+import { ParticipantList } from "~/components/room/ParticipantList";
+import { RemoveParticipantsModal } from "~/components/room/RemoveParticipantsModal";
 import { RevealHistory } from "~/components/room/RevealHistory";
 import { RoomHeader } from "~/components/room/RoomHeader";
 import { SpectatorToggle } from "~/components/room/SpectatorToggle";
-import { RemoveParticipantsModal } from "~/components/room/RemoveParticipantsModal";
+import { VoteResult } from "~/components/room/VoteResult";
+import { VotingCard } from "~/components/room/VotingCard";
+import { useRoomExistence } from "~/hooks/useRoomExistence";
+import { useRoomIdentity, type ParticipantMode } from "~/hooks/useRoomIdentity";
 import { useWebSocket } from "~/hooks/useWebSocket";
-import {
-  getDisplayName,
-  setDisplayName,
-  getPreferredMode,
-  setPreferredMode,
-} from "~/lib/storage";
-import { roomNotFoundRedirectPath } from "~/lib/room-join";
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router";
+import { DECK, type CardValue } from "~/lib/deck";
+
+function hasAnyVotes(votes: Record<string, string | null>): boolean {
+  return Object.values(votes).some((vote) => vote !== null && vote !== undefined);
+}
+
+function RoomStatus({ connected }: { connected: boolean }) {
+  return (
+    <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center">
+      <p className="text-xl font-bold">{connected ? "Loading room..." : "Connecting..."}</p>
+    </div>
+  );
+}
+
+interface ConfirmNameViewProps {
+  nameInput: string;
+  onNameInputChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}
+
+function ConfirmNameView({ nameInput, onNameInputChange, onSubmit }: ConfirmNameViewProps) {
+  return (
+    <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center p-6 selection:bg-black selection:text-white">
+      <div className="w-full max-w-md border-2 border-black p-4 sm:p-6">
+        <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-2">Join room</h1>
+        <p className="text-sm sm:text-base font-medium mb-4">
+          Enter your name before joining this planning session.
+        </p>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <label
+            htmlFor="room-name"
+            className="block text-xs font-bold uppercase tracking-widest"
+          >
+            Your Name
+          </label>
+          <input
+            id="room-name"
+            type="text"
+            value={nameInput}
+            onChange={(event) => onNameInputChange(event.target.value)}
+            placeholder="e.g. Jane Doe"
+            className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
+            required
+            autoFocus
+          />
+          <button
+            type="submit"
+            className="w-full bg-black text-white text-base font-bold uppercase tracking-widest py-2.5 sm:py-3 border-2 border-black hover:bg-white hover:text-black transition-all"
+          >
+            Join Room
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function Room() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const [roomExists, setRoomExists] = useState<boolean | null>(null);
+
+  const { roomExists } = useRoomExistence(roomId, navigate);
   const { room, connected, myId, send } = useWebSocket(
     roomExists ? roomId || null : null
   );
-  const [name, setName] = useState("");
-  const [nameInput, setNameInput] = useState("");
-  const [identityLoaded, setIdentityLoaded] = useState(false);
-  const [nameConfirmed, setNameConfirmed] = useState(false);
-  const [mode, setMode] = useState<"voter" | "spectator">("voter");
+  const {
+    name,
+    nameInput,
+    mode,
+    identityLoaded,
+    nameConfirmed,
+    setNameInput,
+    confirmName,
+    updateName,
+    updateMode,
+    syncFromParticipantName,
+  } = useRoomIdentity(roomId);
+
   const [myVote, setMyVote] = useState<string | null>(null);
   const [joinRequested, setJoinRequested] = useState(false);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-
-    const checkRoomExists = async () => {
-      const trimmedRoomId = roomId?.trim();
-      if (!trimmedRoomId) {
-        navigate(roomNotFoundRedirectPath(), { replace: true });
-        return;
-      }
-
-      setRoomExists(null);
-      try {
-        const response = await fetch(
-          `/api/rooms/exists?roomId=${encodeURIComponent(trimmedRoomId)}`
-        );
-
-        if (!response.ok) {
-          throw new Error("room lookup failed");
-        }
-
-        const payload = (await response.json()) as { exists?: boolean };
-        if (!active) {
-          return;
-        }
-
-        if (!payload.exists) {
-          navigate(roomNotFoundRedirectPath(), { replace: true });
-          return;
-        }
-
-        setRoomExists(true);
-      } catch {
-        if (!active) {
-          return;
-        }
-        navigate(roomNotFoundRedirectPath(), { replace: true });
-      }
-    };
-
-    void checkRoomExists();
-    return () => {
-      active = false;
-    };
-  }, [roomId, navigate]);
+  const me = room?.participants.find((participant) => participant.participantId === myId);
+  const activeMode: ParticipantMode = me?.mode || mode;
 
   useEffect(() => {
-    setIdentityLoaded(false);
-    setName("");
-    setNameInput("");
-    setNameConfirmed(false);
-    setMode("voter");
     setMyVote(null);
     setJoinRequested(false);
-
-    const storedName = getDisplayName(roomId || null);
-    if (storedName) {
-      setName(storedName);
-      setNameInput(storedName);
-      setNameConfirmed(true);
-    }
-    const storedMode = getPreferredMode(roomId || null);
-    if (storedMode) setMode(storedMode);
-    setIdentityLoaded(true);
   }, [roomId]);
-
-  const me = room?.participants.find((p) => p.participantId === myId);
 
   useEffect(() => {
     if (!connected) {
@@ -108,17 +108,20 @@ export default function Room() {
   }, [connected]);
 
   useEffect(() => {
-    if (!room || !myId || !connected || !identityLoaded || !nameConfirmed) return;
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
-
-    const isInRoom = room.participants.some((p) => p.participantId === myId);
-    if (isInRoom) {
-      setJoinRequested(false);
+    if (!room || !myId || !connected || !identityLoaded || !nameConfirmed) {
       return;
     }
 
-    if (joinRequested) {
+    const trimmedName = name.trim();
+    if (!trimmedName || joinRequested) {
+      return;
+    }
+
+    const isParticipantInRoom = room.participants.some(
+      (participant) => participant.participantId === myId
+    );
+    if (isParticipantInRoom) {
+      setJoinRequested(false);
       return;
     }
 
@@ -128,84 +131,106 @@ export default function Room() {
     room,
     myId,
     connected,
-    joinRequested,
     identityLoaded,
     nameConfirmed,
     name,
     mode,
+    joinRequested,
     send,
   ]);
 
-  const handleConfirmName = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      const trimmedName = nameInput.trim();
-      if (!trimmedName) return;
-      setDisplayName(trimmedName, roomId || null);
-      setName(trimmedName);
-      setNameConfirmed(true);
-    },
-    [nameInput, roomId]
-  );
-
   useEffect(() => {
-    if (room?.currentRound.votes && myId) {
-      const vote = room.currentRound.votes[myId];
-      if (vote === null || vote === undefined) {
-        setMyVote(null);
-      } else if (vote !== "hidden") {
-        setMyVote(vote);
-      }
+    if (!room?.currentRound.votes || !myId) {
+      return;
+    }
+
+    const vote = room.currentRound.votes[myId];
+    if (vote === null || vote === undefined) {
+      setMyVote(null);
+      return;
+    }
+
+    if (vote !== "hidden") {
+      setMyVote(vote);
     }
   }, [room?.currentRound.votes, myId]);
 
+  useEffect(() => {
+    syncFromParticipantName(me?.name);
+  }, [me?.name, syncFromParticipantName]);
+
+  const handleConfirmName = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      confirmName();
+    },
+    [confirmName]
+  );
+
   const handleVote = useCallback(
     (value: CardValue) => {
-      if (!myId || room?.currentRound.revealed) return;
+      if (!myId || room?.currentRound.revealed) {
+        return;
+      }
+
       const newVote = myVote === value ? null : value;
       setMyVote(newVote);
       send({ action: "vote", participantId: myId, vote: newVote });
     },
-    [myId, myVote, room?.currentRound.revealed, send]
+    [myId, room?.currentRound.revealed, myVote, send]
   );
 
   const handleReveal = useCallback(() => {
-    if (!myId) return;
+    if (!myId) {
+      return;
+    }
+
     send({ action: "reveal", participantId: myId });
   }, [myId, send]);
 
   const handleReset = useCallback(() => {
-    if (!myId) return;
+    if (!myId) {
+      return;
+    }
+
     setMyVote(null);
     send({ action: "reset_round", participantId: myId });
   }, [myId, send]);
 
   const handleSetName = useCallback(
     (newName: string) => {
-      if (!myId) return;
-      const trimmedName = newName.trim();
-      if (!trimmedName) return;
-      setName(trimmedName);
-      setNameInput(trimmedName);
-      setDisplayName(trimmedName, roomId || null);
+      if (!myId) {
+        return;
+      }
+
+      const trimmedName = updateName(newName);
+      if (!trimmedName) {
+        return;
+      }
+
       send({ action: "set_name", participantId: myId, name: trimmedName });
     },
-    [myId, roomId, send]
+    [myId, updateName, send]
   );
 
   const handleSetMode = useCallback(
-    (newMode: "voter" | "spectator") => {
-      if (!myId) return;
-      setMode(newMode);
-      setPreferredMode(newMode, roomId || null);
+    (newMode: ParticipantMode) => {
+      if (!myId) {
+        return;
+      }
+
+      updateMode(newMode);
       send({ action: "set_mode", participantId: myId, mode: newMode });
     },
-    [myId, roomId, send]
+    [myId, updateMode, send]
   );
 
   const handleSetTitle = useCallback(
     (title: string) => {
-      if (!myId) return;
+      if (!myId) {
+        return;
+      }
+
       send({ action: "set_title", participantId: myId, title });
     },
     [myId, send]
@@ -213,7 +238,10 @@ export default function Room() {
 
   const handleRemoveParticipant = useCallback(
     (removeId: string) => {
-      if (!myId) return;
+      if (!myId) {
+        return;
+      }
+
       send({ action: "remove_participant", participantId: myId, removeId });
     },
     [myId, send]
@@ -223,60 +251,17 @@ export default function Room() {
     navigate("/");
   }, [navigate]);
 
-  useEffect(() => {
-    if (!me?.name) return;
-    setName(me.name);
-    setNameInput(me.name);
-  }, [me?.name]);
-
   if (roomExists !== true || !room) {
-    return (
-      <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center">
-        <p className="text-xl font-bold">
-          {connected ? "Loading room..." : "Connecting..."}
-        </p>
-      </div>
-    );
+    return <RoomStatus connected={connected} />;
   }
-
-  const hasVotes = Object.values(room.currentRound.votes).some(
-    (v) => v !== null && v !== undefined
-  );
 
   if (identityLoaded && !nameConfirmed) {
     return (
-      <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center p-6 selection:bg-black selection:text-white">
-        <div className="w-full max-w-md border-2 border-black p-4 sm:p-6">
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-2">Join room</h1>
-          <p className="text-sm sm:text-base font-medium mb-4">
-            Enter your name before joining this planning session.
-          </p>
-          <form onSubmit={handleConfirmName} className="space-y-4">
-            <label
-              htmlFor="room-name"
-              className="block text-xs font-bold uppercase tracking-widest"
-            >
-              Your Name
-            </label>
-            <input
-              id="room-name"
-              type="text"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              placeholder="e.g. Jane Doe"
-              className="w-full border-2 border-black p-2.5 sm:p-3 text-base font-medium focus:outline-none focus:ring-0 focus:bg-gray-50 transition-colors"
-              required
-              autoFocus
-            />
-            <button
-              type="submit"
-              className="w-full bg-black text-white text-base font-bold uppercase tracking-widest py-2.5 sm:py-3 border-2 border-black hover:bg-white hover:text-black transition-all"
-            >
-              Join Room
-            </button>
-          </form>
-        </div>
-      </div>
+      <ConfirmNameView
+        nameInput={nameInput}
+        onNameInputChange={setNameInput}
+        onSubmit={handleConfirmName}
+      />
     );
   }
 
@@ -296,9 +281,10 @@ export default function Room() {
             <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
               Your Estimate
             </h2>
-            <SpectatorToggle mode={me?.mode || mode} onToggle={handleSetMode} />
+            <SpectatorToggle mode={activeMode} onToggle={handleSetMode} />
           </div>
-          {(me?.mode || mode) === "voter" ? (
+
+          {activeMode === "voter" ? (
             <div className="grid grid-cols-5 gap-2 sm:gap-3">
               {DECK.map((card) => (
                 <VotingCard
@@ -316,12 +302,13 @@ export default function Room() {
             </p>
           )}
         </div>
+
         <div className="space-y-4">
           <ActionControls
             revealed={room.currentRound.revealed}
             onReveal={handleReveal}
             onReset={handleReset}
-            hasVotes={hasVotes}
+            hasVotes={hasAnyVotes(room.currentRound.votes)}
           />
           <ParticipantList
             participants={room.participants}
@@ -331,14 +318,12 @@ export default function Room() {
             onOpenRemove={() => setRemoveModalOpen(true)}
           />
           {room.currentRound.revealed && (
-            <VoteResult
-              participants={room.participants}
-              votes={room.currentRound.votes}
-            />
+            <VoteResult participants={room.participants} votes={room.currentRound.votes} />
           )}
           <RevealHistory history={room.history} />
         </div>
       </main>
+
       <RemoveParticipantsModal
         isOpen={removeModalOpen}
         onClose={() => setRemoveModalOpen(false)}

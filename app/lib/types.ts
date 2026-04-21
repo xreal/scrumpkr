@@ -37,13 +37,19 @@ export interface ClientMessage {
   removeId?: string;
 }
 
-export interface ServerMessage {
-  type: "room_state" | "error";
+export interface RoomStateMessage {
+  type: "room_state";
   room: Room;
-  error?: string;
   yourId?: string;
   yourVote?: string | null;
   yourToken?: string;
 }
+
+export interface ErrorMessage {
+  type: "error";
+  error: string;
+}
+
+export type ServerMessage = RoomStateMessage | ErrorMessage;
 
 export type RoomId = string;

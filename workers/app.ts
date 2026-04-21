@@ -1,4 +1,5 @@
 import { createRequestHandler } from "react-router";
+import { PokerRoom } from "./poker-room";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -9,54 +10,46 @@ declare module "react-router" {
   }
 }
 
+const WS_PATH_PREFIX = "/ws/";
+const ROOMS_PATH = "/api/rooms";
+const ROOM_EXISTS_PATH = "/api/rooms/exists";
+const ROOM_ID_HEADER = "X-Room-Id";
+
+const ROOM_ID_LENGTH = 16;
+const ROOM_ID_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
 const requestHandler = createRequestHandler(
   () => import("virtual:react-router/server-build"),
   import.meta.env.MODE
 );
 
+export { PokerRoom };
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
 
-    if (
-      url.pathname.startsWith("/ws/") &&
-      request.headers.get("Upgrade") === "websocket"
-    ) {
-      const roomId = url.pathname.slice("/ws/".length);
+    if (isWebSocketRoomRequest(request, url.pathname)) {
+      const roomId = roomIdFromWebSocketPath(url.pathname);
       if (!roomId) {
         return new Response("Missing room ID", { status: 400 });
       }
-      const id = env.POKER_ROOM.idFromName(roomId);
-      const stub = env.POKER_ROOM.get(id);
-      return stub.fetch(request);
+
+      return forwardToRoom(env, roomId, request);
     }
 
-    if (url.pathname === "/api/rooms" && request.method === "POST") {
-      const roomId = generateRoomId();
-      const id = env.POKER_ROOM.idFromName(roomId);
-      const stub = env.POKER_ROOM.get(id);
-      const createUrl = new URL(request.url);
-      createUrl.searchParams.set("roomId", roomId);
-      const roomRequest = new Request(createUrl.toString(), request);
-      const response = await stub.fetch(roomRequest);
-      return new Response(response.body, {
-        status: response.status,
-        headers: { ...Object.fromEntries(response.headers.entries()), "X-Room-Id": roomId },
-      });
+    if (url.pathname === ROOMS_PATH && request.method === "POST") {
+      return createRoom(env, request);
     }
 
-    if (url.pathname === "/api/rooms/exists" && request.method === "GET") {
+    if (url.pathname === ROOM_EXISTS_PATH && request.method === "GET") {
       const roomId = url.searchParams.get("roomId")?.trim();
       if (!roomId) {
-        return new Response(JSON.stringify({ exists: false }), {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
+        return jsonResponse({ exists: false }, 400);
       }
 
-      const id = env.POKER_ROOM.idFromName(roomId);
-      const stub = env.POKER_ROOM.get(id);
-      return stub.fetch(request);
+      return forwardToRoom(env, roomId, request);
     }
 
     return requestHandler(request, {
@@ -65,508 +58,63 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+function isWebSocketRoomRequest(request: Request, pathname: string): boolean {
+  return (
+    pathname.startsWith(WS_PATH_PREFIX) &&
+    request.headers.get("Upgrade") === "websocket"
+  );
+}
+
+function roomIdFromWebSocketPath(pathname: string): string {
+  if (!pathname.startsWith(WS_PATH_PREFIX)) {
+    return "";
+  }
+
+  return pathname.slice(WS_PATH_PREFIX.length);
+}
+
+function getRoomStub(env: Env, roomId: string): DurableObjectStub {
+  const id = env.POKER_ROOM.idFromName(roomId);
+  return env.POKER_ROOM.get(id);
+}
+
+function forwardToRoom(env: Env, roomId: string, request: Request): Promise<Response> {
+  return getRoomStub(env, roomId).fetch(request);
+}
+
+async function createRoom(env: Env, request: Request): Promise<Response> {
+  const roomId = generateRoomId();
+  const stub = getRoomStub(env, roomId);
+
+  const createUrl = new URL(request.url);
+  createUrl.searchParams.set("roomId", roomId);
+  const createRequest = new Request(createUrl.toString(), request);
+
+  const response = await stub.fetch(createRequest);
+  const headers = new Headers(response.headers);
+  headers.set(ROOM_ID_HEADER, roomId);
+
+  return new Response(response.body, {
+    status: response.status,
+    headers,
+  });
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function generateRoomId(): string {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(ROOM_ID_LENGTH);
   crypto.getRandomValues(bytes);
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
+
+  let roomId = "";
   for (const byte of bytes) {
-    result += chars[byte % chars.length];
-  }
-  return result;
-}
-
-import {
-  sanitizeName,
-  sanitizeTitle,
-  isValidVote,
-  aggregateReveal,
-} from "../app/lib/vote-logic";
-
-const OFFLINE_PARTICIPANT_TTL_MS = 1000 * 60 * 60 * 24 * 30;
-
-export class PokerRoom implements DurableObject {
-  private state: DurableObjectState;
-  private storage: DurableObjectStorage;
-  private roomData: RoomData;
-
-  constructor(state: DurableObjectState) {
-    this.state = state;
-    this.storage = state.storage;
-    this.roomData = {
-      roomId: "",
-      createdAt: 0,
-      updatedAt: 0,
-      title: "",
-      participants: [],
-      currentRound: { revealed: false, votes: {} },
-      history: [],
-    };
+    roomId += ROOM_ID_ALPHABET[byte % ROOM_ID_ALPHABET.length];
   }
 
-  async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const roomIdFromPath = url.pathname.startsWith("/ws/")
-      ? url.pathname.slice("/ws/".length)
-      : "";
-
-    if (url.pathname === "/api/rooms/exists" && request.method === "GET") {
-      await this.state.blockConcurrencyWhile(async () => {
-        await this.loadFromStorage();
-      });
-
-      const requestedRoomId = url.searchParams.get("roomId")?.trim();
-      const exists =
-        !!requestedRoomId &&
-        this.roomData.createdAt > 0 &&
-        this.roomData.roomId === requestedRoomId;
-
-      return new Response(JSON.stringify({ exists }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    if (request.headers.get("Upgrade") === "websocket") {
-      await this.state.blockConcurrencyWhile(async () => {
-        await this.loadFromStorage();
-      });
-
-      if (
-        !roomIdFromPath ||
-        this.roomData.createdAt === 0 ||
-        this.roomData.roomId !== roomIdFromPath
-      ) {
-        return new Response("Room not found", { status: 404 });
-      }
-
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
-
-      let participantId =
-        url.searchParams.get("participantId") || crypto.randomUUID();
-      let participantToken = url.searchParams.get("token") || "";
-
-      await this.state.blockConcurrencyWhile(async () => {
-        let changed = false;
-
-        const existing = this.roomData.participants.find(
-          (p) => p.participantId === participantId
-        );
-        if (existing) {
-          if (existing.authToken && existing.authToken !== participantToken) {
-            participantId = crypto.randomUUID();
-            participantToken = crypto.randomUUID();
-          } else {
-            existing.connected = true;
-            existing.lastSeenAt = Date.now();
-            if (!existing.authToken) {
-              existing.authToken = participantToken || crypto.randomUUID();
-            }
-            participantToken = existing.authToken;
-            changed = true;
-          }
-        } else if (!participantToken) {
-          participantToken = crypto.randomUUID();
-        }
-
-        if (this.pruneInactiveParticipants(Date.now())) {
-          changed = true;
-        }
-
-        if (changed) {
-          this.roomData.updatedAt = Date.now();
-          await this.saveToStorage();
-        }
-      });
-
-      this.state.acceptWebSocket(server, [participantId, participantToken]);
-      server.send(
-        JSON.stringify({
-          type: "room_state",
-          room: this.sanitizedRoomForParticipant(participantId),
-          yourId: participantId,
-          yourVote: this.getParticipantVote(participantId),
-          yourToken: participantToken,
-        })
-      );
-      this.broadcastRoomState();
-
-      return new Response(null, { status: 101, webSocket: client });
-    }
-
-    if (url.pathname === "/api/rooms" && request.method === "POST") {
-      await this.state.blockConcurrencyWhile(async () => {
-        await this.loadFromStorage();
-        const body = (await request.json()) as { title?: string };
-        this.roomData.roomId = url.searchParams.get("roomId") || this.roomData.roomId;
-        if (this.roomData.createdAt === 0) {
-          this.roomData.createdAt = Date.now();
-        }
-        this.roomData.updatedAt = Date.now();
-        this.roomData.title = body.title || "";
-        await this.saveToStorage();
-      });
-      return new Response(JSON.stringify({ roomId: this.roomData.roomId }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response("Not found", { status: 404 });
-  }
-
-  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-    let data: ClientMessage;
-    try {
-      data = JSON.parse(
-        typeof message === "string"
-          ? message
-          : new TextDecoder().decode(message)
-      ) as ClientMessage;
-    } catch {
-      ws.send(JSON.stringify({ type: "error", error: "Invalid message payload" }));
-      return;
-    }
-
-    const [wsParticipantId, wsParticipantToken] = this.state.getTags(ws);
-    if (!wsParticipantId) {
-      ws.close(1008, "Missing participant identity");
-      return;
-    }
-
-    if (data.participantId && data.participantId !== wsParticipantId) {
-      ws.send(JSON.stringify({ type: "error", error: "Participant mismatch" }));
-      return;
-    }
-
-    await this.state.blockConcurrencyWhile(async () => {
-      await this.loadFromStorage();
-    });
-
-    const participant = this.roomData.participants.find(
-      (p) => p.participantId === wsParticipantId
-    );
-
-    if (data.action !== "join" && !participant) {
-      ws.send(JSON.stringify({ type: "error", error: "Join room first" }));
-      return;
-    }
-
-    let changed = false;
-
-    switch (data.action) {
-      case "join": {
-        const existing = this.roomData.participants.find(
-          (p) => p.participantId === wsParticipantId
-        );
-        const name = sanitizeName(data.name);
-
-        if (!existing) {
-          this.roomData.participants.push({
-            participantId: wsParticipantId,
-            name: name || "Anonymous",
-            role: "admin",
-            mode: data.mode || "voter",
-            connected: true,
-            lastSeenAt: Date.now(),
-            authToken: wsParticipantToken || crypto.randomUUID(),
-          });
-          this.roomData.currentRound.votes[wsParticipantId] = null;
-          changed = true;
-        } else {
-          if (existing.authToken && existing.authToken !== wsParticipantToken) {
-            ws.send(JSON.stringify({ type: "error", error: "Auth mismatch" }));
-            break;
-          }
-          existing.connected = true;
-          existing.lastSeenAt = Date.now();
-          if (name) existing.name = name;
-          if (data.mode) existing.mode = data.mode;
-          if (!existing.authToken) {
-            existing.authToken = wsParticipantToken || crypto.randomUUID();
-          }
-          changed = true;
-        }
-        break;
-      }
-      case "rejoin": {
-        const name = sanitizeName(data.name);
-        if (participant) {
-          participant.connected = true;
-          participant.lastSeenAt = Date.now();
-          if (name) participant.name = name;
-          changed = true;
-        }
-        break;
-      }
-      case "set_name": {
-        const name = sanitizeName(data.name);
-        if (participant && name) {
-          participant.name = name;
-          changed = true;
-        }
-        break;
-      }
-      case "set_mode": {
-        if (participant && data.mode) {
-          participant.mode = data.mode;
-          changed = true;
-        }
-        break;
-      }
-      case "set_title": {
-        this.roomData.title = sanitizeTitle(data.title);
-        changed = true;
-        break;
-      }
-      case "vote": {
-        if (!participant || participant.mode !== "voter") {
-          break;
-        }
-        if (!isValidVote(data.vote)) {
-          ws.send(JSON.stringify({ type: "error", error: "Invalid vote value" }));
-          break;
-        }
-        this.roomData.currentRound.votes[wsParticipantId] = data.vote ?? null;
-        changed = true;
-        break;
-      }
-      case "reveal": {
-        this.roomData.currentRound.revealed = true;
-        const votes = Object.values(this.roomData.currentRound.votes);
-        const agg = aggregateReveal(votes);
-        this.roomData.history.unshift({
-          timestamp: Date.now(),
-          aggregation: agg,
-        });
-        if (this.roomData.history.length > 10) {
-          this.roomData.history = this.roomData.history.slice(0, 10);
-        }
-        changed = true;
-        break;
-      }
-      case "reset_round": {
-        this.roomData.currentRound = { revealed: false, votes: {} };
-        for (const p of this.roomData.participants) {
-          this.roomData.currentRound.votes[p.participantId] = null;
-        }
-        changed = true;
-        break;
-      }
-      case "remove_participant": {
-        if (data.removeId) {
-          const target = this.roomData.participants.find(
-            (p) => p.participantId === data.removeId
-          );
-          if (!target || target.participantId === wsParticipantId) {
-            break;
-          }
-
-          this.roomData.participants = this.roomData.participants.filter(
-            (p) => p.participantId !== data.removeId
-          );
-          delete this.roomData.currentRound.votes[data.removeId];
-          for (const targetWs of this.getSocketsForParticipant(data.removeId)) {
-            targetWs.close(1000, "Removed from room");
-          }
-          changed = true;
-        }
-        break;
-      }
-      default: {
-        ws.send(JSON.stringify({ type: "error", error: "Unknown action" }));
-        return;
-      }
-    }
-
-    if (this.pruneInactiveParticipants(Date.now())) {
-      changed = true;
-    }
-
-    if (!changed) {
-      return;
-    }
-
-    this.roomData.updatedAt = Date.now();
-    await this.state.blockConcurrencyWhile(async () => {
-      await this.saveToStorage();
-    });
-    this.broadcastRoomState();
-  }
-
-  async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    const tags = this.state.getTags(ws);
-    const participantId = tags[0];
-    if (participantId) {
-      await this.state.blockConcurrencyWhile(async () => {
-        await this.loadFromStorage();
-        let changed = false;
-
-        const hasOtherActiveSockets = this.state
-          .getWebSockets()
-          .some(
-            (socket) =>
-              socket !== ws && this.state.getTags(socket)[0] === participantId
-          );
-
-        if (!hasOtherActiveSockets) {
-          const participant = this.roomData.participants.find(
-            (entry) => entry.participantId === participantId
-          );
-
-          if (participant && participant.connected) {
-            participant.connected = false;
-            participant.lastSeenAt = Date.now();
-            changed = true;
-          }
-        }
-
-        if (this.pruneInactiveParticipants(Date.now())) {
-          changed = true;
-        }
-
-        if (changed) {
-          this.roomData.updatedAt = Date.now();
-          await this.saveToStorage();
-        }
-      });
-      this.broadcastRoomState();
-    }
-  }
-
-  private broadcastRoomState() {
-    for (const ws of this.state.getWebSockets()) {
-      try {
-        const participantId = this.state.getTags(ws)[0];
-        ws.send(
-          JSON.stringify({
-            type: "room_state",
-            room: this.sanitizedRoomForParticipant(participantId),
-            yourVote: this.getParticipantVote(participantId),
-            yourToken: this.getParticipantToken(participantId),
-          })
-        );
-      } catch {
-        ws.close(1011, "Broadcast failed");
-      }
-    }
-  }
-
-  private getSocketsForParticipant(participantId: string): WebSocket[] {
-    return this.state
-      .getWebSockets()
-      .filter((ws) => this.state.getTags(ws).includes(participantId));
-  }
-
-  private pruneInactiveParticipants(now: number): boolean {
-    const staleBefore = now - OFFLINE_PARTICIPANT_TTL_MS;
-    const staleIds = this.roomData.participants
-      .filter((participant) => !participant.connected && participant.lastSeenAt < staleBefore)
-      .map((participant) => participant.participantId);
-
-    if (staleIds.length === 0) {
-      return false;
-    }
-
-    this.roomData.participants = this.roomData.participants.filter(
-      (participant) => !staleIds.includes(participant.participantId)
-    );
-
-    for (const staleId of staleIds) {
-      delete this.roomData.currentRound.votes[staleId];
-    }
-
-    return true;
-  }
-
-  private sanitizedRoomForParticipant(participantId?: string): RoomData {
-    const votes = { ...this.roomData.currentRound.votes };
-    if (!this.roomData.currentRound.revealed) {
-      for (const key of Object.keys(votes)) {
-        if (key !== participantId && votes[key] !== null) {
-          votes[key] = "hidden" as string | null;
-        }
-      }
-    }
-    return {
-      ...this.roomData,
-      participants: this.roomData.participants.map((participant) => ({
-        participantId: participant.participantId,
-        name: participant.name,
-        role: participant.role,
-        mode: participant.mode,
-        connected: participant.connected,
-        lastSeenAt: participant.lastSeenAt,
-      })),
-      currentRound: { ...this.roomData.currentRound, votes },
-    };
-  }
-
-  private getParticipantVote(participantId?: string): string | null {
-    if (!participantId) {
-      return null;
-    }
-    return this.roomData.currentRound.votes[participantId] ?? null;
-  }
-
-  private getParticipantToken(participantId?: string): string | null {
-    if (!participantId) {
-      return null;
-    }
-    return (
-      this.roomData.participants.find((participant) => participant.participantId === participantId)
-        ?.authToken ?? null
-    );
-  }
-
-  private async loadFromStorage() {
-    const stored = await this.storage.get<RoomData>("room");
-    if (stored) {
-      this.roomData = stored;
-    }
-  }
-
-  private async saveToStorage() {
-    await this.storage.put("room", this.roomData);
-  }
-}
-
-interface RoomData {
-  roomId: string;
-  createdAt: number;
-  updatedAt: number;
-  title: string;
-  participants: ParticipantData[];
-  currentRound: RoundData;
-  history: RevealEntryData[];
-}
-
-interface ParticipantData {
-  participantId: string;
-  name: string;
-  role: "admin";
-  mode: "voter" | "spectator";
-  connected: boolean;
-  lastSeenAt: number;
-  authToken?: string;
-}
-
-interface RoundData {
-  revealed: boolean;
-  votes: Record<string, string | null>;
-}
-
-interface RevealEntryData {
-  timestamp: number;
-  aggregation: string;
-}
-
-interface ClientMessage {
-  action: "join" | "rejoin" | "set_name" | "set_mode" | "set_title" | "vote" | "reveal" | "reset_round" | "remove_participant";
-  participantId: string;
-  name?: string;
-  mode?: "voter" | "spectator";
-  title?: string;
-  vote?: string | null;
-  removeId?: string;
+  return roomId;
 }
