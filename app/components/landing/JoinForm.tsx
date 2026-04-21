@@ -79,7 +79,7 @@ export function JoinForm({
       </div>
       <button
         type="submit"
-        className="w-full bg-black text-white text-base sm:text-lg font-bold uppercase tracking-widest py-3 sm:py-4 border-2 border-black hover:bg-white hover:text-black transition-all active:translate-y-0.5"
+        className="w-full bg-black text-white text-base sm:text-lg font-bold uppercase tracking-widest py-3 sm:py-4 border-2 border-black hover:bg-white hover:text-black transition-all active:translate-y-0.5 cursor-pointer"
       >
         {roomCode ? "Join Room" : "Create Room"}
       </button>
@@ -87,7 +87,7 @@ export function JoinForm({
         <button
           type="button"
           onClick={() => onRejoinLast(name)}
-          className="w-full border-2 border-black py-2.5 sm:py-3 text-xs sm:text-sm font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all"
+          className="w-full border-2 border-black py-2.5 sm:py-3 text-xs sm:text-sm font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all cursor-pointer"
         >
           Rejoin last room ({lastRoom})
         </button>

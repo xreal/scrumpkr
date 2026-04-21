@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
+import { Github } from "lucide-react";
 import { ActionControls } from "~/components/room/ActionControls";
 import { ParticipantList } from "~/components/room/ParticipantList";
 import { RemoveParticipantsModal } from "~/components/room/RemoveParticipantsModal";
@@ -266,7 +267,7 @@ export default function Room() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black font-sans selection:bg-black selection:text-white pb-12">
+    <div className="min-h-screen bg-white text-black font-sans selection:bg-black selection:text-white flex flex-col">
       <RoomHeader
         title={room.title}
         roomId={roomId || ""}
@@ -275,7 +276,7 @@ export default function Room() {
         onSetName={handleSetName}
         onSetTitle={handleSetTitle}
       />
-      <main className="max-w-6xl mx-auto p-4 mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <main className="flex-1 max-w-6xl mx-auto p-4 lg:p-8 mt-4 lg:mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 w-full">
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
@@ -331,6 +332,31 @@ export default function Room() {
         myId={myId}
         onRemove={handleRemoveParticipant}
       />
+
+      <footer className="mt-auto border-t-2 border-black bg-white sticky bottom-0">
+        <div className="max-w-6xl mx-auto px-4 lg:px-8 py-3 flex items-center justify-between">
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+            Free · No Tracker · No Login · No Ads · No Bullsh!t
+          </p>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://github.com/xreal/scrumpkr"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-black transition-colors cursor-pointer"
+              aria-label="View source on GitHub"
+            >
+              <Github className="w-4 h-4" />
+            </a>
+            <a
+              href="/"
+              className="text-xs font-black tracking-tighter hover:opacity-60 transition-opacity cursor-pointer"
+            >
+              scrumpkr.
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

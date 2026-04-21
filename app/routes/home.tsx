@@ -107,7 +107,7 @@ export default function Home() {
         />
         <div className="mt-8 sm:mt-12 flex flex-col items-center gap-4">
           <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-            No Tracker · No Personal Data · No Ads
+            Free · No Tracker · No Login · No Ads · No Bullsh!t
           </p>
           <a
             href="https://github.com/xreal/scrumpkr"

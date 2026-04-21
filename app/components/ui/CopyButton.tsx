@@ -20,7 +20,7 @@ export function CopyButton({ text, label }: CopyButtonProps) {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-1.5 hover:bg-black hover:text-white p-1.5 transition-colors"
+      className="flex items-center gap-1.5 hover:bg-black hover:text-white p-1.5 transition-colors cursor-pointer"
       title={label || "Copy"}
     >
       {copied ? <Check size={16} /> : <Copy size={16} />}

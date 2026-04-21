@@ -118,7 +118,7 @@ export function RoomHeader({
         <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
           <button
             onClick={onLeave}
-            className="text-lg sm:text-2xl font-black tracking-tighter hover:opacity-60 transition-opacity flex-shrink-0"
+            className="text-lg sm:text-2xl font-black tracking-tighter hover:opacity-60 transition-opacity flex-shrink-0 cursor-pointer"
             title="Back to startpage"
           >
             scrumpkr.
@@ -161,7 +161,7 @@ export function RoomHeader({
           </div>
           <button
             onClick={onLeave}
-            className="flex items-center justify-center gap-2 border-2 border-black h-10 sm:h-11 w-10 sm:w-auto sm:px-3 text-xs sm:text-sm hover:bg-black hover:text-white transition-colors flex-shrink-0"
+            className="flex items-center justify-center gap-2 border-2 border-black h-10 sm:h-11 w-10 sm:w-auto sm:px-3 text-xs sm:text-sm hover:bg-black hover:text-white transition-colors flex-shrink-0 cursor-pointer"
             title="Leave room"
           >
             <LogOut size={16} />

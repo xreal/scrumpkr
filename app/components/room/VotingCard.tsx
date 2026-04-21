@@ -14,7 +14,7 @@ export function VotingCard({ value, selected, disabled, onSelect }: VotingCardPr
       onClick={() => onSelect(value)}
       disabled={disabled}
       className={`
-        relative h-14 sm:h-16 md:h-20 w-full flex items-center justify-center border-2 border-black text-xl sm:text-2xl font-black transition-all
+        relative h-14 sm:h-16 md:h-20 w-full flex items-center justify-center border-2 border-black text-xl sm:text-2xl font-black transition-all cursor-pointer
         ${disabled && !selected ? "opacity-30 cursor-not-allowed" : ""}
         ${selected
           ? "bg-black text-white shadow-none"
