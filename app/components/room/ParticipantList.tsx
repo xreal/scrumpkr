@@ -72,7 +72,7 @@ export function ParticipantList({
                     : hasVoted && !isHidden
                       ? vote
                       : "—"
-                  : hasVoted && !isHidden
+                  : hasVoted
                     ? "✓"
                     : ""}
               </span>
