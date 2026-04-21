@@ -8,6 +8,10 @@
     "preview": "react-router build && vite preview",
     "deploy": "react-router build && wrangler deploy",
     "cf-typegen": "wrangler types",
+    "test": "vitest run && vitest run --config vitest.workers.config.ts",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:workers": "vitest run --config vitest.workers.config.ts",
     "typecheck": "wrangler types && react-router typegen && tsc -b",
     "postinstall": "wrangler types"
   },
@@ -20,17 +24,26 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.29.1",
+    "@cloudflare/vitest-pool-workers": "^0.14.8",
     "@react-router/dev": "7.14.0",
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitest/ui": "^4.1.4",
+    "jsdom": "^29.0.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
     "vite": "^8.0.3",
+    "vitest": "^4.1.4",
     "wrangler": "^4.75.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "workerd"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
   }
 }

@@ -4,7 +4,7 @@ interface RevealHistoryProps {
   history: RevealEntry[];
 }
 
-function timeAgo(timestamp: number): string {
+export function timeAgo(timestamp: number): string {
   const diff = Date.now() - timestamp;
   const minutes = Math.floor(diff / 60000);
   if (minutes < 1) return "just now";

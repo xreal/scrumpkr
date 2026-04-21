@@ -63,22 +63,14 @@ function generateRoomId(): string {
   return result;
 }
 
+import {
+  sanitizeName,
+  sanitizeTitle,
+  isValidVote,
+  aggregateReveal,
+} from "../app/lib/vote-logic";
+
 const OFFLINE_PARTICIPANT_TTL_MS = 1000 * 60 * 60 * 24 * 30;
-const VALID_VOTES = new Set([
-  "0",
-  "0.5",
-  "1",
-  "2",
-  "3",
-  "5",
-  "8",
-  "13",
-  "20",
-  "40",
-  "100",
-  "?",
-  "coffee",
-]);
 
 export class PokerRoom implements DurableObject {
   private state: DurableObjectState;
@@ -536,31 +528,4 @@ interface ClientMessage {
   removeId?: string;
 }
 
-function sanitizeName(name?: string): string | undefined {
-  if (!name) return undefined;
-  const trimmed = name.trim();
-  if (!trimmed) return undefined;
-  return trimmed.slice(0, 40);
-}
 
-function sanitizeTitle(title?: string): string {
-  if (!title) return "";
-  return title.trim().slice(0, 120);
-}
-
-function isValidVote(vote?: string | null): boolean {
-  if (vote == null) return true;
-  return VALID_VOTES.has(vote);
-}
-
-function aggregateReveal(votes: (string | null)[]): string {
-  const counts: Record<string, number> = {};
-  for (const v of votes) {
-    if (v == null) continue;
-    counts[v] = (counts[v] ?? 0) + 1;
-  }
-  const parts = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([val, count]) => `${count}x${val}`);
-  return parts.length > 0 ? parts.join(", ") : "no votes";
-}
