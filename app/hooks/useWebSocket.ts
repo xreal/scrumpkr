@@ -21,9 +21,10 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
   const [connected, setConnected] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const shouldReconnectRef = useRef(false);
 
   const connect = useCallback(() => {
-    if (!roomId) return;
+    if (!roomId || !shouldReconnectRef.current) return;
 
     const storedId = getParticipantId(roomId);
     const storedToken = getParticipantToken(roomId);
@@ -41,9 +42,13 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
-    ws.onopen = () => setConnected(true);
+    ws.onopen = () => {
+      if (wsRef.current !== ws) return;
+      setConnected(true);
+    };
 
     ws.onmessage = (event) => {
+      if (wsRef.current !== ws) return;
       const msg: ServerMessage = JSON.parse(event.data);
       if (msg.type === "room_state") {
         setRoom(msg.room);
@@ -59,18 +64,34 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
     };
 
     ws.onclose = () => {
+      if (wsRef.current !== ws) return;
       setConnected(false);
-      reconnectTimer.current = setTimeout(() => connect(), 2000);
+      if (!shouldReconnectRef.current) {
+        return;
+      }
+      reconnectTimer.current = setTimeout(() => {
+        if (shouldReconnectRef.current) {
+          connect();
+        }
+      }, 2000);
     };
 
-    ws.onerror = () => ws.close();
+    ws.onerror = () => {
+      if (wsRef.current !== ws) return;
+      ws.close();
+    };
   }, [roomId]);
 
   useEffect(() => {
+    shouldReconnectRef.current = true;
     connect();
+
     return () => {
+      shouldReconnectRef.current = false;
       clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      const currentWebSocket = wsRef.current;
+      wsRef.current = null;
+      currentWebSocket?.close();
     };
   }, [connect]);
 
