@@ -46,9 +46,9 @@ export function ParticipantList({
               <span className="flex items-center gap-2 min-w-0">
                 <span
                   className={`inline-block h-2 w-2 rounded-full border border-black flex-shrink-0 ${
-                    p.connected ? "bg-green-500" : "bg-red-500"
+                    p.connected ? "bg-green-500" : "bg-gray-400"
                   }`}
-                  title={p.connected ? "Online" : "Offline"}
+                  title={p.connected ? "Online" : "Inactive"}
                 />
                 <span
                   className={`truncate ${

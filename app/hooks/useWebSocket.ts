@@ -15,16 +15,42 @@ interface UseWebSocketReturn {
   send: (msg: object) => void;
 }
 
+const INITIAL_RECONNECT_DELAY_MS = 2000;
+const MAX_RECONNECT_DELAY_MS = 30000;
+
 export function useWebSocket(roomId: string | null): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
   const [connected, setConnected] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const reconnectAttemptsRef = useRef(0);
   const shouldReconnectRef = useRef(false);
 
+  const clearReconnectTimer = useCallback(() => {
+    clearTimeout(reconnectTimer.current);
+    reconnectTimer.current = undefined;
+  }, []);
+
+  const closeCurrentSocket = useCallback(() => {
+    const currentSocket = wsRef.current;
+    wsRef.current = null;
+    currentSocket?.close();
+  }, []);
+
   const connect = useCallback(() => {
-    if (!roomId || !shouldReconnectRef.current) return;
+    if (!roomId || !shouldReconnectRef.current) {
+      return;
+    }
+
+    const currentSocket = wsRef.current;
+    if (
+      currentSocket &&
+      (currentSocket.readyState === WebSocket.OPEN ||
+        currentSocket.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
 
     const storedId = getParticipantId(roomId);
     const storedToken = getParticipantToken(roomId);
@@ -44,12 +70,20 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
 
     ws.onopen = () => {
       if (wsRef.current !== ws) return;
+      reconnectAttemptsRef.current = 0;
+      clearReconnectTimer();
       setConnected(true);
     };
 
     ws.onmessage = (event) => {
       if (wsRef.current !== ws) return;
-      const msg: ServerMessage = JSON.parse(event.data);
+      let msg: ServerMessage;
+      try {
+        msg = JSON.parse(event.data) as ServerMessage;
+      } catch {
+        return;
+      }
+
       if (msg.type === "room_state") {
         setRoom(msg.room);
         if (msg.yourId) {
@@ -65,35 +99,57 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
 
     ws.onclose = () => {
       if (wsRef.current !== ws) return;
+      wsRef.current = null;
       setConnected(false);
       if (!shouldReconnectRef.current) {
         return;
       }
+
+      const reconnectDelay = Math.min(
+        INITIAL_RECONNECT_DELAY_MS * 2 ** reconnectAttemptsRef.current,
+        MAX_RECONNECT_DELAY_MS
+      );
+
+      reconnectAttemptsRef.current += 1;
       reconnectTimer.current = setTimeout(() => {
         if (shouldReconnectRef.current) {
           connect();
         }
-      }, 2000);
+      }, reconnectDelay);
     };
 
     ws.onerror = () => {
       if (wsRef.current !== ws) return;
-      ws.close();
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
     };
-  }, [roomId]);
+  }, [roomId, clearReconnectTimer]);
 
   useEffect(() => {
+    setRoom(null);
+    setMyId(null);
+    setConnected(false);
+
+    if (!roomId) {
+      shouldReconnectRef.current = false;
+      reconnectAttemptsRef.current = 0;
+      clearReconnectTimer();
+      closeCurrentSocket();
+      return;
+    }
+
     shouldReconnectRef.current = true;
+    reconnectAttemptsRef.current = 0;
     connect();
 
     return () => {
       shouldReconnectRef.current = false;
-      clearTimeout(reconnectTimer.current);
-      const currentWebSocket = wsRef.current;
-      wsRef.current = null;
-      currentWebSocket?.close();
+      reconnectAttemptsRef.current = 0;
+      clearReconnectTimer();
+      closeCurrentSocket();
     };
-  }, [connect]);
+  }, [roomId, connect, clearReconnectTimer, closeCurrentSocket]);
 
   const send = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

@@ -410,15 +410,13 @@ export class PokerRoom implements DurableObject {
           );
 
         if (!hasOtherActiveSockets) {
-          const participantExists = this.roomData.participants.some(
-            (participant) => participant.participantId === participantId
+          const participant = this.roomData.participants.find(
+            (entry) => entry.participantId === participantId
           );
 
-          if (participantExists) {
-            this.roomData.participants = this.roomData.participants.filter(
-              (participant) => participant.participantId !== participantId
-            );
-            delete this.roomData.currentRound.votes[participantId];
+          if (participant && participant.connected) {
+            participant.connected = false;
+            participant.lastSeenAt = Date.now();
             changed = true;
           }
         }

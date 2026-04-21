@@ -29,7 +29,7 @@ export function RemoveParticipantsModal({
           </h3>
           <button
             onClick={onClose}
-            className="hover:opacity-60 transition-opacity flex-shrink-0"
+            className="hover:opacity-60 transition-opacity shrink-0"
             title="Close"
           >
             <X size={20} strokeWidth={3} />
@@ -48,14 +48,14 @@ export function RemoveParticipantsModal({
                   className="flex items-center justify-between gap-3"
                 >
                   <span className="text-sm font-bold truncate">
-                    {p.name} {!p.connected ? "(Offline)" : ""}
+                    {p.name} {!p.connected ? "(Inactive)" : ""}
                   </span>
                   <button
                     onClick={() => {
                       onRemove(p.participantId);
                       onClose();
                     }}
-                    className="flex-shrink-0 border-2 border-black px-2 py-0.5 text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
+                    className="shrink-0 border-2 border-black px-2 py-0.5 text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
                   >
                     Remove
                   </button>

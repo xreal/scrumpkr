@@ -1,5 +1,9 @@
 import { JoinForm } from "~/components/landing/JoinForm";
-import { setDisplayName, setLastRoom, getLastRoom } from "~/lib/storage";
+import {
+  setDisplayName,
+  setLastRoom as persistLastRoom,
+  getLastRoom,
+} from "~/lib/storage";
 import {
   ROOM_NOT_FOUND_MESSAGE,
   getJoinErrorMessageFromSearch,
@@ -19,12 +23,16 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
   const navigate = useNavigate();
   const location = useLocation();
-  const lastRoom = getLastRoom();
+  const [lastRoom, setLastRoom] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
     setJoinError(getJoinErrorMessageFromSearch(location.search));
   }, [location.search]);
+
+  useEffect(() => {
+    setLastRoom(getLastRoom());
+  }, []);
 
   const handleJoin = async (name: string, existingRoomId?: string) => {
     const trimmedName = name.trim();
@@ -52,7 +60,7 @@ export default function Home() {
 
       setJoinError(null);
       setDisplayName(trimmedName, roomId);
-      setLastRoom(roomId);
+      persistLastRoom(roomId);
       navigate(`/room/${roomId}`);
       return;
     }
@@ -67,7 +75,7 @@ export default function Home() {
     const roomId = res.headers.get("X-Room-Id");
     if (roomId) {
       setDisplayName(trimmedName, roomId);
-      setLastRoom(roomId);
+      persistLastRoom(roomId);
       navigate(`/room/${roomId}`);
     }
   };
@@ -77,7 +85,7 @@ export default function Home() {
     const trimmedName = name.trim();
     if (!trimmedName) return;
     setDisplayName(trimmedName, lastRoom);
-    setLastRoom(lastRoom);
+    persistLastRoom(lastRoom);
     navigate(`/room/${lastRoom}`);
   };
 

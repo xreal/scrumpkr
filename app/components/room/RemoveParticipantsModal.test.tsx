@@ -53,7 +53,7 @@ describe("RemoveParticipantsModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows (Offline) label for disconnected participants", () => {
+  it("shows (Inactive) label for disconnected participants", () => {
     render(
       <RemoveParticipantsModal
         {...defaultProps}
@@ -67,7 +67,7 @@ describe("RemoveParticipantsModal", () => {
         myId="p1"
       />
     );
-    expect(screen.getByText(/bob.*offline/i)).toBeInTheDocument();
+    expect(screen.getByText(/bob.*inactive/i)).toBeInTheDocument();
   });
 
   it("calls onRemove with correct participantId and onClose when Remove is clicked", () => {

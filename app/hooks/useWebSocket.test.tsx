@@ -82,4 +82,29 @@ describe("useWebSocket", () => {
 
     expect(MockWebSocket.instances).toHaveLength(1);
   });
+
+  it("keeps a single socket after connection opens", () => {
+    renderHook(() => useWebSocket("room-1"));
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    act(() => {
+      MockWebSocket.instances[0].onopen?.(new Event("open"));
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  it("keeps connection open while timers advance", () => {
+    renderHook(() => useWebSocket("room-1"));
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    act(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
 });

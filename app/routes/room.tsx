@@ -31,7 +31,7 @@ export default function Room() {
   const [nameConfirmed, setNameConfirmed] = useState(false);
   const [mode, setMode] = useState<"voter" | "spectator">("voter");
   const [myVote, setMyVote] = useState<string | null>(null);
-  const [joined, setJoined] = useState(false);
+  const [joinRequested, setJoinRequested] = useState(false);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function Room() {
     setNameConfirmed(false);
     setMode("voter");
     setMyVote(null);
-    setJoined(false);
+    setJoinRequested(false);
 
     const storedName = getDisplayName(roomId || null);
     if (storedName) {
@@ -102,18 +102,39 @@ export default function Room() {
   const me = room?.participants.find((p) => p.participantId === myId);
 
   useEffect(() => {
-    if (!room || !myId || joined || !identityLoaded || !nameConfirmed) return;
+    if (!connected) {
+      setJoinRequested(false);
+    }
+  }, [connected]);
+
+  useEffect(() => {
+    if (!room || !myId || !connected || !identityLoaded || !nameConfirmed) return;
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    const isRejoin = room.participants.some((p) => p.participantId === myId);
-    if (isRejoin) {
-      send({ action: "rejoin", participantId: myId, name: trimmedName });
-    } else {
-      send({ action: "join", participantId: myId, name: trimmedName, mode });
+    const isInRoom = room.participants.some((p) => p.participantId === myId);
+    if (isInRoom) {
+      setJoinRequested(false);
+      return;
     }
-    setJoined(true);
-  }, [room, myId, joined, identityLoaded, nameConfirmed, name, mode, send]);
+
+    if (joinRequested) {
+      return;
+    }
+
+    send({ action: "join", participantId: myId, name: trimmedName, mode });
+    setJoinRequested(true);
+  }, [
+    room,
+    myId,
+    connected,
+    joinRequested,
+    identityLoaded,
+    nameConfirmed,
+    name,
+    mode,
+    send,
+  ]);
 
   const handleConfirmName = useCallback(
     (e: React.FormEvent) => {
