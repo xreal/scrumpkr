@@ -14,7 +14,7 @@ export function VoteResult({ participants, votes }: VoteResultProps) {
   const average = computeAverage(voterVotes);
 
   return (
-    <div className="mt-4 pt-4 border-t-2 border-black flex justify-between items-center">
+    <div className="flex justify-between items-center -mt-2">
       <span className="text-base font-black uppercase tracking-widest">
         Average
       </span>
