@@ -7,6 +7,7 @@ interface ParticipantListProps {
   votes: Record<string, string | null>;
   myId: string | null;
   onOpenRemove: () => void;
+  onPoke?: (participantId: string) => void;
 }
 
 export function ParticipantList({
@@ -15,6 +16,7 @@ export function ParticipantList({
   votes,
   myId,
   onOpenRemove,
+  onPoke,
 }: ParticipantListProps) {
   return (
     <div className="border-2 border-black p-4">
@@ -38,6 +40,13 @@ export function ParticipantList({
           const hasVoted = vote !== null && vote !== undefined;
           const isHidden = vote === "hidden";
 
+          const canPoke =
+            !revealed &&
+            !isMe &&
+            onPoke &&
+            p.mode === "voter" &&
+            !hasVoted;
+
           return (
             <li
               key={p.participantId}
@@ -50,15 +59,29 @@ export function ParticipantList({
                   }`}
                   title={p.connected ? "Online" : "Inactive"}
                 />
-                <span
-                  className={`truncate ${
-                    isMe ? "underline decoration-2 underline-offset-2" : ""
-                  }`}
-                  title={p.name}
-                >
-                  {p.name}
-                  {isMe ? " (You)" : ""}
-                </span>
+                {canPoke ? (
+                  <button
+                    type="button"
+                    onClick={() => onPoke(p.participantId)}
+                    className={`truncate cursor-pointer hover:underline decoration-2 underline-offset-2 ${
+                      isMe ? "underline decoration-2 underline-offset-2" : ""
+                    }`}
+                    title={`Poke ${p.name} to vote`}
+                  >
+                    {p.name}
+                    {isMe ? " (You)" : ""}
+                  </button>
+                ) : (
+                  <span
+                    className={`truncate ${
+                      isMe ? "underline decoration-2 underline-offset-2" : ""
+                    }`}
+                    title={p.name}
+                  >
+                    {p.name}
+                    {isMe ? " (You)" : ""}
+                  </span>
+                )}
                 {p.mode === "spectator" && (
                   <span className="text-xs font-medium bg-gray-200 px-1.5 py-0.5 flex-shrink-0">
                     Spectator

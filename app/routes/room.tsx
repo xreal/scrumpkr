@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Github } from "lucide-react";
 import { ActionControls } from "~/components/room/ActionControls";
@@ -16,6 +16,38 @@ import { DECK, type CardValue } from "~/lib/deck";
 
 function hasAnyVotes(votes: Record<string, string | null>): boolean {
   return Object.values(votes).some((vote) => vote !== null && vote !== undefined);
+}
+
+function playPokeSound(): void {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(660, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
+
+    gain.gain.setValueAtTime(0.03, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+  } catch {
+    // ignore audio errors
+  }
+}
+
+function getBaseTitle(roomTitle: string | undefined, roomId: string | undefined): string {
+  if (roomTitle) {
+    return `scrumpkr > ${roomTitle}`;
+  }
+  if (roomId) {
+    return `scrumpkr > ${roomId}`;
+  }
+  return "scrumpkr.";
 }
 
 function RoomStatus({ connected }: { connected: boolean }) {
@@ -72,11 +104,48 @@ function ConfirmNameView({ nameInput, onNameInputChange, onSubmit }: ConfirmName
 export default function Room() {
   const { roomId } = useParams();
   const navigate = useNavigate();
+  const pokeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const roomTitleRef = useRef<string | undefined>(undefined);
+
+  const handlePoke = useCallback(
+    (fromName: string) => {
+      playPokeSound();
+      if (pokeIntervalRef.current) {
+        clearInterval(pokeIntervalRef.current);
+      }
+      const baseTitle = getBaseTitle(roomTitleRef.current, roomId);
+      let count = 0;
+      pokeIntervalRef.current = setInterval(() => {
+        document.title =
+          count % 2 === 0 ? `📢 ${fromName} poked you!` : baseTitle;
+        count++;
+        if (count >= 6) {
+          if (pokeIntervalRef.current) {
+            clearInterval(pokeIntervalRef.current);
+            pokeIntervalRef.current = null;
+          }
+          document.title = baseTitle;
+        }
+      }, 500);
+    },
+    [roomId]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (pokeIntervalRef.current) {
+        clearInterval(pokeIntervalRef.current);
+      }
+    };
+  }, []);
 
   const { roomExists } = useRoomExistence(roomId, navigate);
   const { room, connected, myId, send } = useWebSocket(
-    roomExists ? roomId || null : null
+    roomExists ? roomId || null : null,
+    handlePoke
   );
+
+  roomTitleRef.current = room?.title;
   const {
     name,
     nameInput,
@@ -101,6 +170,11 @@ export default function Room() {
     setMyVote(null);
     setJoinRequested(false);
   }, [roomId]);
+
+  useEffect(() => {
+    if (pokeIntervalRef.current) return;
+    document.title = getBaseTitle(room?.title, roomId);
+  }, [room?.title, roomId]);
 
   useEffect(() => {
     if (!connected) {
@@ -248,6 +322,14 @@ export default function Room() {
     [myId, send]
   );
 
+  const handleSendPoke = useCallback(
+    (targetId: string) => {
+      if (!myId) return;
+      send({ action: "poke", participantId: myId, targetId });
+    },
+    [myId, send]
+  );
+
   const handleLeave = useCallback(() => {
     navigate("/");
   }, [navigate]);
@@ -317,6 +399,7 @@ export default function Room() {
             votes={room.currentRound.votes}
             myId={myId}
             onOpenRemove={() => setRemoveModalOpen(true)}
+            onPoke={handleSendPoke}
           />
           {room.currentRound.revealed && (
             <VoteResult participants={room.participants} votes={room.currentRound.votes} />

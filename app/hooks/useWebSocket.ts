@@ -15,6 +15,10 @@ interface UseWebSocketReturn {
   send: (msg: ClientMessage) => void;
 }
 
+function isPokeMessage(msg: ServerMessage): msg is Extract<ServerMessage, { type: "poke" }> {
+  return msg.type === "poke";
+}
+
 const INITIAL_RECONNECT_DELAY_MS = 2000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 
@@ -66,7 +70,10 @@ function parseServerMessage(payload: unknown): ServerMessage | null {
   }
 }
 
-export function useWebSocket(roomId: string | null): UseWebSocketReturn {
+export function useWebSocket(
+  roomId: string | null,
+  onPoke?: (fromName: string) => void
+): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
   const [connected, setConnected] = useState(false);
@@ -110,7 +117,14 @@ export function useWebSocket(roomId: string | null): UseWebSocketReturn {
     ws.onmessage = (event) => {
       if (wsRef.current !== ws) return;
       const msg = parseServerMessage(event.data);
-      if (!msg || msg.type !== "room_state") {
+      if (!msg) return;
+
+      if (isPokeMessage(msg)) {
+        onPoke?.(msg.fromName);
+        return;
+      }
+
+      if (msg.type !== "room_state") {
         return;
       }
 

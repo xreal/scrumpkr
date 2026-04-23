@@ -4,6 +4,7 @@ import { getDisplayName } from "~/lib/storage";
 interface JoinFormProps {
   onSubmit: (name: string, roomId?: string) => void;
   lastRoom?: string | null;
+  lastRoomTitle?: string | null;
   onRejoinLast?: (name: string) => void;
   errorMessage?: string | null;
   onClearError?: () => void;
@@ -12,6 +13,7 @@ interface JoinFormProps {
 export function JoinForm({
   onSubmit,
   lastRoom,
+  lastRoomTitle,
   onRejoinLast,
   errorMessage,
   onClearError,
@@ -89,7 +91,7 @@ export function JoinForm({
           onClick={() => onRejoinLast(name)}
           className="w-full border-2 border-black py-2.5 sm:py-3 text-xs sm:text-sm font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-all cursor-pointer"
         >
-          Rejoin last room ({lastRoom})
+          Rejoin last room ({lastRoomTitle || lastRoom})
         </button>
       )}
     </form>

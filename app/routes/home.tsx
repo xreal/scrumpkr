@@ -15,7 +15,7 @@ import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "scrumpkr. — Minimalist Planning Poker" },
+    { title: "scrumpkr.net -> Your minimal Scrum Poker App" },
     { name: "description", content: "No-login planning poker for teams. Create a room, share the link, start estimating." },
   ];
 }
@@ -24,6 +24,7 @@ export default function Home() {
   const navigate = useNavigate();
   const location = useLocation();
   const [lastRoom, setLastRoom] = useState<string | null>(null);
+  const [lastRoomTitle, setLastRoomTitle] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,7 +32,20 @@ export default function Home() {
   }, [location.search]);
 
   useEffect(() => {
-    setLastRoom(getLastRoom());
+    const storedRoom = getLastRoom();
+    setLastRoom(storedRoom);
+
+    if (storedRoom) {
+      fetch(`/api/rooms/exists?roomId=${encodeURIComponent(storedRoom)}`)
+        .then(async (response) => {
+          if (!response.ok) return;
+          const payload = (await response.json()) as { title?: string | null };
+          if (payload.title) {
+            setLastRoomTitle(payload.title);
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const handleJoin = async (name: string, existingRoomId?: string) => {
@@ -101,6 +115,7 @@ export default function Home() {
         <JoinForm
           onSubmit={handleJoin}
           lastRoom={lastRoom}
+          lastRoomTitle={lastRoomTitle}
           onRejoinLast={handleRejoinLast}
           errorMessage={joinError}
           onClearError={() => setJoinError(null)}

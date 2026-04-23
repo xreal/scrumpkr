@@ -98,4 +98,68 @@ describe("ParticipantList", () => {
     fireEvent.click(screen.getByTitle("Remove participants"));
     expect(onOpenRemove).toHaveBeenCalledOnce();
   });
+
+  it("allows poking a non-voter when onPoke is provided", () => {
+    const onPoke = vi.fn();
+    const participants = [
+      makeParticipant({ participantId: "p1", name: "Alice" }),
+      makeParticipant({ participantId: "p2", name: "Bob" }),
+    ];
+    render(
+      <ParticipantList
+        {...defaultProps}
+        participants={participants}
+        myId="p1"
+        onPoke={onPoke}
+      />
+    );
+    const pokeButton = screen.getByTitle("Poke Bob to vote");
+    expect(pokeButton).toBeInTheDocument();
+    fireEvent.click(pokeButton);
+    expect(onPoke).toHaveBeenCalledWith("p2");
+  });
+
+  it("does not allow poking self", () => {
+    const onPoke = vi.fn();
+    render(
+      <ParticipantList {...defaultProps} myId="p1" onPoke={onPoke} />
+    );
+    expect(screen.queryByTitle(/Poke/)).not.toBeInTheDocument();
+  });
+
+  it("does not allow poking a voter who has already voted", () => {
+    const onPoke = vi.fn();
+    const participants = [
+      makeParticipant({ participantId: "p1", name: "Alice" }),
+      makeParticipant({ participantId: "p2", name: "Bob" }),
+    ];
+    render(
+      <ParticipantList
+        {...defaultProps}
+        participants={participants}
+        myId="p1"
+        votes={{ p2: "5" }}
+        onPoke={onPoke}
+      />
+    );
+    expect(screen.queryByTitle("Poke Bob to vote")).not.toBeInTheDocument();
+  });
+
+  it("does not allow poking after reveal", () => {
+    const onPoke = vi.fn();
+    const participants = [
+      makeParticipant({ participantId: "p1", name: "Alice" }),
+      makeParticipant({ participantId: "p2", name: "Bob" }),
+    ];
+    render(
+      <ParticipantList
+        {...defaultProps}
+        participants={participants}
+        myId="p1"
+        revealed={true}
+        onPoke={onPoke}
+      />
+    );
+    expect(screen.queryByTitle(/Poke/)).not.toBeInTheDocument();
+  });
 });

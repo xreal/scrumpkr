@@ -32,12 +32,12 @@ describe("Worker API", () => {
     );
     const existingResponse = await exports.default.fetch(existingRequest);
     expect(existingResponse.status).toBe(200);
-    await expect(existingResponse.json()).resolves.toEqual({ exists: true });
+    await expect(existingResponse.json()).resolves.toEqual({ exists: true, title: "Sprint 42" });
 
     const missingRequest = new Request("http://test/api/rooms/exists?roomId=foo");
     const missingResponse = await exports.default.fetch(missingRequest);
     expect(missingResponse.status).toBe(200);
-    await expect(missingResponse.json()).resolves.toEqual({ exists: false });
+    await expect(missingResponse.json()).resolves.toEqual({ exists: false, title: null });
   });
 });
 

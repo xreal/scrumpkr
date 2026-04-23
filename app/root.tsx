@@ -11,6 +11,21 @@ import type { Route } from "./+types/root";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
+  { rel: "icon", type: "image/png", href: "/favicon.png" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+  { rel: "manifest", href: "/site.webmanifest" },
+  {
+    rel: "icon",
+    type: "image/png",
+    sizes: "192x192",
+    href: "/android-chrome-192x192.png",
+  },
+  {
+    rel: "icon",
+    type: "image/png",
+    sizes: "512x512",
+    href: "/android-chrome-512x512.png",
+  },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",

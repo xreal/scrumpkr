@@ -23,6 +23,7 @@ const CLIENT_ACTIONS = [
   "reveal",
   "reset_round",
   "remove_participant",
+  "poke",
 ] as const;
 
 type IncomingClientMessage = Omit<ClientMessage, "participantId"> & {
@@ -160,12 +161,29 @@ export class PokerRoom implements DurableObject {
     let errorMessage: string | null = null;
     let shouldBroadcast = false;
     let socketsToClose: WebSocket[] = [];
+    let isPoke = false;
 
     await this.state.blockConcurrencyWhile(async () => {
       await this.loadFromStorage();
 
       if (data.action !== "join" && !this.getParticipant(wsParticipantId)) {
         errorMessage = "Join room first";
+        return;
+      }
+
+      if (data.action === "poke") {
+        isPoke = true;
+        if (data.targetId) {
+          const fromParticipant = this.getParticipant(wsParticipantId);
+          for (const targetSocket of this.getSocketsForParticipant(data.targetId)) {
+            targetSocket.send(
+              JSON.stringify({
+                type: "poke",
+                fromName: fromParticipant?.name || "Someone",
+              })
+            );
+          }
+        }
         return;
       }
 
@@ -196,6 +214,10 @@ export class PokerRoom implements DurableObject {
       await this.saveToStorage();
       shouldBroadcast = true;
     });
+
+    if (isPoke) {
+      return;
+    }
 
     if (errorMessage) {
       ws.send(JSON.stringify({ type: "error", error: errorMessage }));
@@ -271,7 +293,10 @@ export class PokerRoom implements DurableObject {
       this.roomData.createdAt > 0 &&
       this.roomData.roomId === requestedRoomId;
 
-    return jsonResponse({ exists });
+    return jsonResponse({
+      exists,
+      title: exists ? this.roomData.title || null : null,
+    });
   }
 
   private async handleWebSocketUpgrade(
