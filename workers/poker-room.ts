@@ -12,6 +12,8 @@ const ROOM_EXISTS_PATH = "/api/rooms/exists";
 
 const HISTORY_LIMIT = 10;
 const OFFLINE_PARTICIPANT_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const MAX_SOCKETS_PER_PARTICIPANT = 3;
+const MAX_SOCKETS_PER_ROOM = 50;
 
 const CLIENT_ACTIONS = [
   "join",
@@ -311,6 +313,7 @@ export class PokerRoom implements DurableObject {
     let participantId = url.searchParams.get("participantId") || crypto.randomUUID();
     let participantToken = url.searchParams.get("token") || "";
     let roomExists = false;
+    let shouldBroadcast = false;
 
     await this.state.blockConcurrencyWhile(async () => {
       await this.loadFromStorage();
@@ -342,10 +345,20 @@ export class PokerRoom implements DurableObject {
 
       this.roomData.updatedAt = now;
       await this.saveToStorage();
+      shouldBroadcast = true;
     });
 
     if (!roomExists) {
       return new Response("Room not found", { status: 404 });
+    }
+
+    if (this.state.getWebSockets().length >= MAX_SOCKETS_PER_ROOM) {
+      return new Response("Room is full", { status: 429 });
+    }
+
+    const participantSocketCount = this.getSocketsForParticipant(participantId).length;
+    if (participantSocketCount >= MAX_SOCKETS_PER_PARTICIPANT) {
+      return new Response("Too many active connections", { status: 429 });
     }
 
     const pair = new WebSocketPair();
@@ -361,7 +374,10 @@ export class PokerRoom implements DurableObject {
         yourToken: participantToken,
       })
     );
-    this.broadcastRoomState();
+
+    if (shouldBroadcast) {
+      this.broadcastRoomState();
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -446,22 +462,33 @@ export class PokerRoom implements DurableObject {
       return { changed: false, error: "Auth mismatch" };
     }
 
-    existing.connected = true;
-    existing.lastSeenAt = Date.now();
+    let changed = false;
 
-    if (name) {
-      existing.name = name;
+    if (!existing.connected) {
+      existing.connected = true;
+      changed = true;
     }
 
-    if (data.mode) {
+    if (name && name !== existing.name) {
+      existing.name = name;
+      changed = true;
+    }
+
+    if (data.mode && data.mode !== existing.mode) {
       existing.mode = data.mode;
+      changed = true;
     }
 
     if (!existing.authToken) {
       existing.authToken = wsParticipantToken || crypto.randomUUID();
+      changed = true;
     }
 
-    return { changed: true };
+    if (changed) {
+      existing.lastSeenAt = Date.now();
+    }
+
+    return { changed };
   }
 
   private handleRejoinAction(
@@ -503,8 +530,30 @@ export class PokerRoom implements DurableObject {
       return { changed: false };
     }
 
+    if (participant.mode === data.mode) {
+      return { changed: false };
+    }
+
     participant.mode = data.mode;
+
+    if (participant.mode === "spectator") {
+      this.roomData.currentRound.votes[participant.participantId] = null;
+    }
+
+    if (!(participant.participantId in this.roomData.currentRound.votes)) {
+      this.roomData.currentRound.votes[participant.participantId] = null;
+    }
+
     return { changed: true };
+  }
+
+  private getCurrentRoundVotesForVoters(): (string | null)[] {
+    return this.roomData.participants
+      .filter((participant) => participant.mode === "voter")
+      .map(
+        (participant) =>
+          this.roomData.currentRound.votes[participant.participantId] ?? null
+      );
   }
 
   private handleSetTitleAction(data: IncomingClientMessage): ActionResult {
@@ -521,18 +570,32 @@ export class PokerRoom implements DurableObject {
       return { changed: false };
     }
 
+    if (this.roomData.currentRound.revealed) {
+      return { changed: false, error: "Round already revealed" };
+    }
+
     if (!isValidVote(data.vote)) {
       return { changed: false, error: "Invalid vote value" };
     }
 
-    this.roomData.currentRound.votes[wsParticipantId] = data.vote ?? null;
+    const nextVote = data.vote ?? null;
+    const currentVote = this.roomData.currentRound.votes[wsParticipantId] ?? null;
+    if (currentVote === nextVote) {
+      return { changed: false };
+    }
+
+    this.roomData.currentRound.votes[wsParticipantId] = nextVote;
     return { changed: true };
   }
 
   private handleRevealAction(): ActionResult {
+    if (this.roomData.currentRound.revealed) {
+      return { changed: false };
+    }
+
     this.roomData.currentRound.revealed = true;
 
-    const votes = Object.values(this.roomData.currentRound.votes);
+    const votes = this.getCurrentRoundVotesForVoters();
     const aggregation = aggregateReveal(votes);
 
     this.roomData.history.unshift({
@@ -548,6 +611,26 @@ export class PokerRoom implements DurableObject {
   }
 
   private handleResetRoundAction(): ActionResult {
+    const participantIds = this.roomData.participants.map(
+      (participant) => participant.participantId
+    );
+
+    const currentVotes = this.roomData.currentRound.votes;
+    const hasAllParticipantVotes = participantIds.every(
+      (participantId) => currentVotes[participantId] === null
+    );
+
+    const hasOnlyParticipantVotes =
+      Object.keys(currentVotes).length === participantIds.length;
+
+    if (
+      !this.roomData.currentRound.revealed &&
+      hasAllParticipantVotes &&
+      hasOnlyParticipantVotes
+    ) {
+      return { changed: false };
+    }
+
     this.roomData.currentRound = { revealed: false, votes: {} };
     for (const participant of this.roomData.participants) {
       this.roomData.currentRound.votes[participant.participantId] = null;

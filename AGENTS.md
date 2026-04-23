@@ -68,10 +68,19 @@ app/lib/__tests__/      # Unit tests for pure helpers (colocate or adjacent)
 - Keep DO storage small (< 1MB). History capped at 10 entries. Prune stale participants (30-day TTL).
 - Avoid Cron. Avoid external APIs. Avoid heavy computation in DO.
 
+## Durable Object Rules (keep this generic)
+- **One DO = one coordination atom**: Model by room/session/entity. Never create one global DO for all traffic.
+- **Idempotent actions first**: Retries and duplicate messages happen. Mutations like `reveal`, `reset_round`, `vote` should be safe when repeated.
+- **Persist critical state before risky work**: In-memory state can be lost on eviction/crash; storage is the durable source of truth.
+- **Use `blockConcurrencyWhile` only for read-modify-write critical sections**: Keep read-only paths out when possible.
+- **Avoid unnecessary fan-out**: Broadcast only on real shared-state changes, not on connect-only noise.
+- **Bound hot paths**: Add explicit limits for room size / socket fan-out and keep per-message work predictable.
+- **Shard for throughput**: A single DO is single-threaded and has soft throughput limits (~1k req/s for simple ops). Scale by creating more DO instances.
+
 ## Development Workflow
 - `pnpm dev` — local dev with Miniflare -> Never run this!
 - `pnpm build` — production build
-- `pnpm deploy` — build + `wrangler deploy`
+- `pnpm run deploy` — build + `wrangler deploy`
 - `pnpm typecheck` — type generation + TS check
 - `pnpm test` — run Vitest suite (unit + component tests)
 - `pnpm test:workers` — run Durable Object integration tests
