@@ -272,6 +272,14 @@ export default function Room() {
     send({ action: "reset_round", participantId: myId });
   }, [myId, send]);
 
+  const handleClearHistory = useCallback(() => {
+    if (!myId) {
+      return;
+    }
+
+    send({ action: "clear_history", participantId: myId });
+  }, [myId, send]);
+
   const handleSetName = useCallback(
     (newName: string) => {
       if (!myId) {
@@ -404,7 +412,7 @@ export default function Room() {
           {room.currentRound.revealed && (
             <VoteResult participants={room.participants} votes={room.currentRound.votes} />
           )}
-          <RevealHistory history={room.history} />
+          <RevealHistory history={room.history} onClear={handleClearHistory} />
         </div>
       </main>
 

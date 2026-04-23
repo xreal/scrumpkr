@@ -26,7 +26,7 @@ describe("timeAgo", () => {
 
 describe("RevealHistory", () => {
   it("renders nothing when history is empty", () => {
-    const { container } = render(<RevealHistory history={[]} />);
+    const { container } = render(<RevealHistory history={[]} onClear={vi.fn()} />);
     expect(container.innerHTML).toBe("");
   });
 
@@ -35,7 +35,7 @@ describe("RevealHistory", () => {
       { timestamp: Date.now() - 60000, aggregation: "2x5, 1x8" },
       { timestamp: Date.now() - 3600000, aggregation: "3x3" },
     ];
-    render(<RevealHistory history={history} />);
+    render(<RevealHistory history={history} onClear={vi.fn()} />);
     expect(screen.getByText("2x5, 1x8")).toBeInTheDocument();
     expect(screen.getByText("3x3")).toBeInTheDocument();
   });
@@ -44,7 +44,19 @@ describe("RevealHistory", () => {
     const history: RevealEntry[] = [
       { timestamp: Date.now() - 60000, aggregation: "1x5" },
     ];
-    render(<RevealHistory history={history} />);
+    render(<RevealHistory history={history} onClear={vi.fn()} />);
     expect(screen.getByText("1m ago")).toBeInTheDocument();
+  });
+
+  it("calls onClear when Clear is clicked", () => {
+    const onClear = vi.fn();
+    const history: RevealEntry[] = [
+      { timestamp: Date.now() - 60000, aggregation: "1x5" },
+    ];
+
+    render(<RevealHistory history={history} onClear={onClear} />);
+    screen.getByRole("button", { name: /clear/i }).click();
+
+    expect(onClear).toHaveBeenCalledOnce();
   });
 });

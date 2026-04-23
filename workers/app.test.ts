@@ -327,6 +327,82 @@ describe("PokerRoom Durable Object", () => {
     ws.close();
   });
 
+  it("clears reveal history entries", async () => {
+    const createRequest = new Request("http://test/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Clear History" }),
+    });
+    const createResponse = await exports.default.fetch(createRequest);
+    const { roomId } = (await createResponse.json()) as { roomId: string };
+
+    const wsResponse = await exports.default.fetch(
+      new Request(
+        `http://test/ws/${roomId}?participantId=tester-clear&token=test-token-clear`,
+        { headers: { Upgrade: "websocket" } }
+      )
+    );
+
+    expect(wsResponse.status).toBe(101);
+    const ws = wsResponse.webSocket as WebSocket;
+    ws.accept();
+
+    await nextSocketMessageOfType(ws, "room_state");
+
+    ws.send(
+      JSON.stringify({
+        action: "join",
+        participantId: "tester-clear",
+        name: "Clear Tester",
+        mode: "voter",
+      })
+    );
+    await nextRoomStateMatching(
+      ws,
+      (room) => room.currentRound.votes["tester-clear"] === null
+    );
+
+    ws.send(
+      JSON.stringify({
+        action: "vote",
+        participantId: "tester-clear",
+        vote: "5",
+      })
+    );
+    await nextRoomStateMatching(
+      ws,
+      (room) => room.currentRound.votes["tester-clear"] === "5"
+    );
+
+    ws.send(
+      JSON.stringify({
+        action: "reveal",
+        participantId: "tester-clear",
+      })
+    );
+    await nextRoomStateMatching(
+      ws,
+      (room) => room.currentRound.revealed && room.history[0]?.aggregation === "1x5"
+    );
+
+    ws.send(
+      JSON.stringify({
+        action: "clear_history",
+        participantId: "tester-clear",
+      })
+    );
+
+    const roomAfterClear = await nextRoomStateMatching(
+      ws,
+      (room) => room.history.length === 0
+    );
+
+    expect(roomAfterClear.currentRound.revealed).toBe(true);
+    expect(roomAfterClear.history).toEqual([]);
+
+    ws.close();
+  });
+
   it("does not broadcast to existing clients on connect-only events", async () => {
     const createRequest = new Request("http://test/api/rooms", {
       method: "POST",

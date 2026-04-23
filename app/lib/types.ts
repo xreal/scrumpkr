@@ -28,7 +28,7 @@ export interface RevealEntry {
 }
 
 export interface ClientMessage {
-  action: "join" | "rejoin" | "set_name" | "set_mode" | "set_title" | "vote" | "reveal" | "reset_round" | "remove_participant" | "poke";
+  action: "join" | "rejoin" | "set_name" | "set_mode" | "set_title" | "vote" | "reveal" | "reset_round" | "clear_history" | "remove_participant" | "poke";
   participantId: string;
   name?: string;
   mode?: "voter" | "spectator";

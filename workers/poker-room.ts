@@ -24,6 +24,7 @@ const CLIENT_ACTIONS = [
   "vote",
   "reveal",
   "reset_round",
+  "clear_history",
   "remove_participant",
   "poke",
 ] as const;
@@ -429,6 +430,8 @@ export class PokerRoom implements DurableObject {
         return this.handleRevealAction();
       case "reset_round":
         return this.handleResetRoundAction();
+      case "clear_history":
+        return this.handleClearHistoryAction();
       case "remove_participant":
         return this.handleRemoveParticipantAction(data, wsParticipantId);
       default:
@@ -636,6 +639,15 @@ export class PokerRoom implements DurableObject {
       this.roomData.currentRound.votes[participant.participantId] = null;
     }
 
+    return { changed: true };
+  }
+
+  private handleClearHistoryAction(): ActionResult {
+    if (this.roomData.history.length === 0) {
+      return { changed: false };
+    }
+
+    this.roomData.history = [];
     return { changed: true };
   }
 
