@@ -130,6 +130,52 @@ describe("Worker API", () => {
     expect(missingResponse.status).toBe(200);
     await expect(missingResponse.json()).resolves.toEqual({ exists: false, title: null });
   });
+
+  it("returns a user-facing connection limit error before websocket upgrade", async () => {
+    const createRequest = new Request("http://test/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Connection Limits" }),
+    });
+    const createResponse = await exports.default.fetch(createRequest);
+    const { roomId } = (await createResponse.json()) as { roomId: string };
+
+    const sockets: WebSocket[] = [];
+
+    for (let index = 0; index < 3; index++) {
+      const wsResponse = await exports.default.fetch(
+        new Request(
+          `http://test/ws/${roomId}?participantId=tester-limit&token=test-token-limit`,
+          { headers: { Upgrade: "websocket" } }
+        )
+      );
+
+      expect(wsResponse.status).toBe(101);
+      expect(wsResponse.webSocket).toBeDefined();
+
+      const ws = wsResponse.webSocket as WebSocket;
+      ws.accept();
+      await nextSocketMessageOfType(ws, "room_state");
+      sockets.push(ws);
+    }
+
+    const connectCheckResponse = await exports.default.fetch(
+      new Request(
+        `http://test/api/rooms/connect?roomId=${roomId}&participantId=tester-limit&token=test-token-limit`
+      )
+    );
+
+    expect(connectCheckResponse.status).toBe(429);
+    await expect(connectCheckResponse.json()).resolves.toEqual({
+      ok: false,
+      code: "too_many_connections",
+      error: "Too many active connections",
+    });
+
+    for (const socket of sockets) {
+      socket.close();
+    }
+  });
 });
 
 describe("PokerRoom Durable Object", () => {

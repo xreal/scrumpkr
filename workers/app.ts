@@ -13,6 +13,7 @@ declare module "react-router" {
 const WS_PATH_PREFIX = "/ws/";
 const ROOMS_PATH = "/api/rooms";
 const ROOM_EXISTS_PATH = "/api/rooms/exists";
+const ROOM_CONNECT_PATH = "/api/rooms/connect";
 const ROOM_ID_HEADER = "X-Room-Id";
 
 const ROOM_ID_LENGTH = 16;
@@ -47,6 +48,15 @@ export default {
       const roomId = url.searchParams.get("roomId")?.trim();
       if (!roomId) {
         return jsonResponse({ exists: false }, 400);
+      }
+
+      return forwardToRoom(env, roomId, request);
+    }
+
+    if (url.pathname === ROOM_CONNECT_PATH && request.method === "GET") {
+      const roomId = url.searchParams.get("roomId")?.trim();
+      if (!roomId) {
+        return jsonResponse({ ok: false, code: "room_not_found" }, 400);
       }
 
       return forwardToRoom(env, roomId, request);

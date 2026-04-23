@@ -50,10 +50,62 @@ function getBaseTitle(roomTitle: string | undefined, roomId: string | undefined)
   return "scrumpkr.";
 }
 
-function RoomStatus({ connected }: { connected: boolean }) {
+interface RoomStatusProps {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
+}
+
+function RoomStatus({
+  title,
+  message,
+  actionLabel,
+  onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+}: RoomStatusProps) {
   return (
-    <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center">
-      <p className="text-xl font-bold">{connected ? "Loading room..." : "Connecting..."}</p>
+    <div className="min-h-screen bg-white text-black font-sans flex items-center justify-center p-6 selection:bg-black selection:text-white">
+      <div className="w-full max-w-md border-2 border-black p-6 space-y-3">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">scrumpkr.</p>
+        <h1 className="text-2xl font-black tracking-tight">{title}</h1>
+        <p className="text-sm font-medium leading-6 text-gray-700">{message}</p>
+        {(actionLabel || secondaryActionLabel) && (
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+            {actionLabel && onAction ? (
+              <button
+                type="button"
+                onClick={onAction}
+                className="flex-1 border-2 border-black bg-black px-4 py-3 text-sm font-bold uppercase tracking-widest text-white transition-all hover:bg-white hover:text-black"
+              >
+                {actionLabel}
+              </button>
+            ) : null}
+            {secondaryActionLabel && onSecondaryAction ? (
+              <button
+                type="button"
+                onClick={onSecondaryAction}
+                className="flex-1 border-2 border-black px-4 py-3 text-sm font-bold uppercase tracking-widest transition-all hover:bg-black hover:text-white"
+              >
+                {secondaryActionLabel}
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RoomBanner({ message }: { message: string }) {
+  return (
+    <div className="mx-auto mt-4 w-full max-w-6xl px-4 lg:px-8">
+      <div className="border-2 border-black bg-gray-50 px-4 py-3 text-sm font-medium text-black" role="alert">
+        {message}
+      </div>
     </div>
   );
 }
@@ -139,11 +191,17 @@ export default function Room() {
     };
   }, []);
 
-  const { roomExists } = useRoomExistence(roomId, navigate);
-  const { room, connected, myId, send } = useWebSocket(
-    roomExists ? roomId || null : null,
-    handlePoke
-  );
+  const { roomExists, lookupError, retryLookup } = useRoomExistence(roomId, navigate);
+  const {
+    room,
+    connected,
+    myId,
+    send,
+    actionError,
+    connectionError,
+    isReconnecting,
+    retryConnection,
+  } = useWebSocket(roomExists ? roomId || null : null, handlePoke);
 
   roomTitleRef.current = room?.title;
   const {
@@ -342,8 +400,54 @@ export default function Room() {
     navigate("/");
   }, [navigate]);
 
-  if (roomExists !== true || !room) {
-    return <RoomStatus connected={connected} />;
+  if (lookupError) {
+    return (
+      <RoomStatus
+        title="Room unavailable"
+        message={lookupError}
+        actionLabel="Try Again"
+        onAction={retryLookup}
+        secondaryActionLabel="Back Home"
+        onSecondaryAction={handleLeave}
+      />
+    );
+  }
+
+  if (roomExists !== true) {
+    return (
+      <RoomStatus
+        title="Checking room"
+        message="Making sure this room is ready before you join."
+      />
+    );
+  }
+
+  if (connectionError) {
+    return (
+      <RoomStatus
+        title="Unable to join room"
+        message={connectionError}
+        actionLabel="Try Again"
+        onAction={retryConnection}
+        secondaryActionLabel="Back Home"
+        onSecondaryAction={handleLeave}
+      />
+    );
+  }
+
+  if (!room) {
+    return (
+      <RoomStatus
+        title={connected ? "Loading room" : isReconnecting ? "Reconnecting" : "Connecting"}
+        message={
+          isReconnecting
+            ? "Connection dropped. Reconnecting you to the room now."
+            : connected
+              ? "Syncing the latest room state."
+              : "Opening a live connection to this room."
+        }
+      />
+    );
   }
 
   if (identityLoaded && !nameConfirmed) {
@@ -358,6 +462,10 @@ export default function Room() {
 
   return (
     <div className="min-h-screen bg-white text-black font-sans selection:bg-black selection:text-white flex flex-col">
+      {isReconnecting ? (
+        <RoomBanner message="Connection lost. Reconnecting to the room..." />
+      ) : null}
+      {actionError ? <RoomBanner message={actionError} /> : null}
       <RoomHeader
         title={room.title}
         roomId={roomId || ""}

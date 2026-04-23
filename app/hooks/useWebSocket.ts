@@ -1,6 +1,12 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import type { ClientMessage, Room, ServerMessage } from "~/lib/types";
 import {
+  REMOVED_FROM_ROOM_MESSAGE,
+  ROOM_FULL_MESSAGE,
+  ROOM_LOOKUP_ERROR_MESSAGE,
+  TOO_MANY_CONNECTIONS_MESSAGE,
+} from "~/lib/room-join";
+import {
   getParticipantId,
   setParticipantId,
   getParticipantToken,
@@ -13,6 +19,16 @@ interface UseWebSocketReturn {
   connected: boolean;
   myId: string | null;
   send: (msg: ClientMessage) => void;
+  actionError: string | null;
+  connectionError: string | null;
+  isReconnecting: boolean;
+  retryConnection: () => void;
+}
+
+interface ConnectionCheckResponse {
+  ok?: boolean;
+  code?: string;
+  error?: string;
 }
 
 function isPokeMessage(msg: ServerMessage): msg is Extract<ServerMessage, { type: "poke" }> {
@@ -70,6 +86,64 @@ function parseServerMessage(payload: unknown): ServerMessage | null {
   }
 }
 
+function mapSocketActionError(error: string): string | null {
+  switch (error) {
+    case "Round already revealed":
+      return "This round is already revealed. Reset the round to vote again.";
+    case "Invalid vote value":
+      return "That vote could not be saved. Please try again.";
+    default:
+      return null;
+  }
+}
+
+function mapConnectionCheckError(code: string | undefined, fallback: string | undefined): string {
+  switch (code) {
+    case "room_not_found":
+      return "Room not found.";
+    case "too_many_connections":
+      return TOO_MANY_CONNECTIONS_MESSAGE;
+    case "room_full":
+      return ROOM_FULL_MESSAGE;
+    default:
+      return fallback || ROOM_LOOKUP_ERROR_MESSAGE;
+  }
+}
+
+function mapSocketCloseReason(reason: string): string | null {
+  if (reason === "Removed from room") {
+    return REMOVED_FROM_ROOM_MESSAGE;
+  }
+
+  return null;
+}
+
+async function checkConnection(roomId: string): Promise<string | null> {
+  const participantId = getParticipantId(roomId);
+  const participantToken = getParticipantToken(roomId);
+  const params = new URLSearchParams({ roomId });
+
+  if (participantId) {
+    params.set("participantId", participantId);
+  }
+
+  if (participantToken) {
+    params.set("token", participantToken);
+  }
+
+  try {
+    const response = await fetch(`/api/rooms/connect?${params.toString()}`);
+    if (response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json().catch(() => null)) as ConnectionCheckResponse | null;
+    return mapConnectionCheckError(payload?.code, payload?.error);
+  } catch {
+    return null;
+  }
+}
+
 export function useWebSocket(
   roomId: string | null,
   onPoke?: (fromName: string) => void
@@ -78,6 +152,9 @@ export function useWebSocket(
   const [room, setRoom] = useState<Room | null>(null);
   const [connected, setConnected] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const shouldReconnectRef = useRef(false);
@@ -95,7 +172,7 @@ export function useWebSocket(
     currentSocket?.close();
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!roomId || !shouldReconnectRef.current) {
       return;
     }
@@ -103,6 +180,20 @@ export function useWebSocket(
     if (isSocketOpenOrConnecting(wsRef.current)) {
       return;
     }
+
+    const blockingError = await checkConnection(roomId);
+    if (!shouldReconnectRef.current || isSocketOpenOrConnecting(wsRef.current)) {
+      return;
+    }
+
+    if (blockingError) {
+      setConnectionError(blockingError);
+      setConnected(false);
+      setIsReconnecting(false);
+      return;
+    }
+
+    setConnectionError(null);
 
     const ws = new WebSocket(buildWebSocketUrl(roomId));
     wsRef.current = ws;
@@ -112,6 +203,8 @@ export function useWebSocket(
       reconnectAttemptsRef.current = 0;
       clearReconnectTimer();
       setConnected(true);
+      setIsReconnecting(false);
+      setConnectionError(null);
     };
 
     ws.onmessage = (event) => {
@@ -124,10 +217,19 @@ export function useWebSocket(
         return;
       }
 
+      if (msg.type === "error") {
+        const nextActionError = mapSocketActionError(msg.error);
+        if (nextActionError) {
+          setActionError(nextActionError);
+        }
+        return;
+      }
+
       if (msg.type !== "room_state") {
         return;
       }
 
+      setActionError(null);
       setRoom(msg.room);
       if (msg.yourId) {
         setMyId(msg.yourId);
@@ -139,10 +241,21 @@ export function useWebSocket(
       setLastRoom(roomId);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (wsRef.current !== ws) return;
       wsRef.current = null;
       setConnected(false);
+
+      const nextConnectionError = mapSocketCloseReason(event.reason);
+      if (nextConnectionError) {
+        shouldReconnectRef.current = false;
+        clearReconnectTimer();
+        setRoom(null);
+        setConnectionError(nextConnectionError);
+        setIsReconnecting(false);
+        return;
+      }
+
       if (!shouldReconnectRef.current) {
         return;
       }
@@ -150,9 +263,10 @@ export function useWebSocket(
       const reconnectDelay = getReconnectDelay(reconnectAttemptsRef.current);
 
       reconnectAttemptsRef.current += 1;
+      setIsReconnecting(true);
       reconnectTimer.current = setTimeout(() => {
         if (shouldReconnectRef.current) {
-          connect();
+          void connect();
         }
       }, reconnectDelay);
     };
@@ -163,12 +277,15 @@ export function useWebSocket(
         ws.close();
       }
     };
-  }, [roomId, clearReconnectTimer]);
+  }, [roomId, clearReconnectTimer, onPoke]);
 
   useEffect(() => {
     setRoom(null);
     setMyId(null);
     setConnected(false);
+    setActionError(null);
+    setConnectionError(null);
+    setIsReconnecting(false);
 
     if (!roomId) {
       shouldReconnectRef.current = false;
@@ -180,7 +297,7 @@ export function useWebSocket(
 
     shouldReconnectRef.current = true;
     reconnectAttemptsRef.current = 0;
-    connect();
+    void connect();
 
     return () => {
       shouldReconnectRef.current = false;
@@ -192,9 +309,34 @@ export function useWebSocket(
 
   const send = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setActionError(null);
       wsRef.current.send(JSON.stringify(msg));
     }
   }, []);
 
-  return { room, connected, myId, send };
+  const retryConnection = useCallback(() => {
+    if (!roomId) {
+      return;
+    }
+
+    setActionError(null);
+    setConnectionError(null);
+    setIsReconnecting(false);
+    reconnectAttemptsRef.current = 0;
+    shouldReconnectRef.current = true;
+    clearReconnectTimer();
+    closeCurrentSocket();
+    void connect();
+  }, [roomId, clearReconnectTimer, closeCurrentSocket, connect]);
+
+  return {
+    room,
+    connected,
+    myId,
+    send,
+    actionError,
+    connectionError,
+    isReconnecting,
+    retryConnection,
+  };
 }

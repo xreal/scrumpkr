@@ -5,6 +5,8 @@ import {
   getLastRoom,
 } from "~/lib/storage";
 import {
+  ROOM_CREATE_ERROR_MESSAGE,
+  ROOM_LOOKUP_ERROR_MESSAGE,
   ROOM_NOT_FOUND_MESSAGE,
   getJoinErrorMessageFromSearch,
 } from "~/lib/room-join";
@@ -58,39 +60,51 @@ export default function Home() {
       const roomId = existingRoomId.trim();
       if (!roomId) return;
 
-      const existsResponse = await fetch(
-        `/api/rooms/exists?roomId=${encodeURIComponent(roomId)}`
-      );
-      if (!existsResponse.ok) {
-        setJoinError(ROOM_NOT_FOUND_MESSAGE);
+      try {
+        const existsResponse = await fetch(
+          `/api/rooms/exists?roomId=${encodeURIComponent(roomId)}`
+        );
+        if (!existsResponse.ok) {
+          setJoinError(ROOM_LOOKUP_ERROR_MESSAGE);
+          return;
+        }
+
+        const payload = (await existsResponse.json()) as { exists?: boolean };
+        if (!payload.exists) {
+          setJoinError(ROOM_NOT_FOUND_MESSAGE);
+          return;
+        }
+
+        setJoinError(null);
+        setDisplayName(trimmedName, roomId);
+        persistLastRoom(roomId);
+        navigate(`/room/${roomId}`);
+        return;
+      } catch {
+        setJoinError(ROOM_LOOKUP_ERROR_MESSAGE);
         return;
       }
-
-      const payload = (await existsResponse.json()) as { exists?: boolean };
-      if (!payload.exists) {
-        setJoinError(ROOM_NOT_FOUND_MESSAGE);
-        return;
-      }
-
-      setJoinError(null);
-      setDisplayName(trimmedName, roomId);
-      persistLastRoom(roomId);
-      navigate(`/room/${roomId}`);
-      return;
     }
 
     setJoinError(null);
 
-    const res = await fetch("/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "" }),
-    });
-    const roomId = res.headers.get("X-Room-Id");
-    if (roomId) {
+    try {
+      const res = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "" }),
+      });
+      const roomId = res.headers.get("X-Room-Id");
+      if (!res.ok || !roomId) {
+        setJoinError(ROOM_CREATE_ERROR_MESSAGE);
+        return;
+      }
+
       setDisplayName(trimmedName, roomId);
       persistLastRoom(roomId);
       navigate(`/room/${roomId}`);
+    } catch {
+      setJoinError(ROOM_CREATE_ERROR_MESSAGE);
     }
   };
 

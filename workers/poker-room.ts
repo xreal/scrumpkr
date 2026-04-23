@@ -9,6 +9,7 @@ import {
 const WS_PATH_PREFIX = "/ws/";
 const ROOMS_PATH = "/api/rooms";
 const ROOM_EXISTS_PATH = "/api/rooms/exists";
+const ROOM_CONNECT_PATH = "/api/rooms/connect";
 
 const HISTORY_LIMIT = 10;
 const OFFLINE_PARTICIPANT_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -130,6 +131,10 @@ export class PokerRoom implements DurableObject {
 
     if (url.pathname === ROOM_EXISTS_PATH && request.method === "GET") {
       return this.handleRoomExistsRequest(url);
+    }
+
+    if (url.pathname === ROOM_CONNECT_PATH && request.method === "GET") {
+      return this.handleRoomConnectRequest(url);
     }
 
     if (isWebSocketUpgradeRequest(request)) {
@@ -300,6 +305,56 @@ export class PokerRoom implements DurableObject {
       exists,
       title: exists ? this.roomData.title || null : null,
     });
+  }
+
+  private async handleRoomConnectRequest(url: URL): Promise<Response> {
+    await this.state.blockConcurrencyWhile(async () => {
+      await this.loadFromStorage();
+    });
+
+    const requestedRoomId = url.searchParams.get("roomId")?.trim();
+    const participantId = url.searchParams.get("participantId")?.trim() || "";
+    const participantToken = url.searchParams.get("token")?.trim() || "";
+    const roomExists =
+      !!requestedRoomId &&
+      this.roomData.createdAt > 0 &&
+      this.roomData.roomId === requestedRoomId;
+
+    if (!roomExists) {
+      return jsonResponse(
+        { ok: false, code: "room_not_found", error: "Room not found" },
+        404
+      );
+    }
+
+    if (this.state.getWebSockets().length >= MAX_SOCKETS_PER_ROOM) {
+      return jsonResponse(
+        { ok: false, code: "room_full", error: "Room is full" },
+        429
+      );
+    }
+
+    if (participantId) {
+      const existingParticipant = this.getParticipant(participantId);
+      const hasAuthMismatch =
+        !!existingParticipant?.authToken && existingParticipant.authToken !== participantToken;
+
+      if (!hasAuthMismatch) {
+        const participantSocketCount = this.getSocketsForParticipant(participantId).length;
+        if (participantSocketCount >= MAX_SOCKETS_PER_PARTICIPANT) {
+          return jsonResponse(
+            {
+              ok: false,
+              code: "too_many_connections",
+              error: "Too many active connections",
+            },
+            429
+          );
+        }
+      }
+    }
+
+    return jsonResponse({ ok: true });
   }
 
   private async handleWebSocketUpgrade(

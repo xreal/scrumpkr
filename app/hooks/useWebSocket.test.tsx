@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useWebSocket } from "./useWebSocket";
 
+async function flushAsyncWork(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   static CONNECTING = 0;
@@ -31,13 +37,21 @@ class MockWebSocket {
 
 describe("useWebSocket", () => {
   const originalWebSocket = globalThis.WebSocket;
+  const originalFetch = globalThis.fetch;
+  const fetchMock = vi.fn();
 
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
     MockWebSocket.instances = [];
+    fetchMock.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({ ok: true }) });
     Object.defineProperty(globalThis, "WebSocket", {
       value: MockWebSocket,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(globalThis, "fetch", {
+      value: fetchMock,
       writable: true,
       configurable: true,
     });
@@ -50,10 +64,17 @@ describe("useWebSocket", () => {
       writable: true,
       configurable: true,
     });
+    Object.defineProperty(globalThis, "fetch", {
+      value: originalFetch,
+      writable: true,
+      configurable: true,
+    });
   });
 
-  it("reconnects after close while still mounted", () => {
+  it("reconnects after close while still mounted", async () => {
     renderHook(() => useWebSocket("room-1"));
+
+    await flushAsyncWork();
 
     expect(MockWebSocket.instances).toHaveLength(1);
 
@@ -63,48 +84,90 @@ describe("useWebSocket", () => {
 
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => {
-      vi.advanceTimersByTime(2000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
     });
 
     expect(MockWebSocket.instances).toHaveLength(2);
   });
 
-  it("does not reconnect after unmount", () => {
+  it("does not reconnect after unmount", async () => {
     const { unmount } = renderHook(() => useWebSocket("room-1"));
 
+    await flushAsyncWork();
+
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => {
+    await act(async () => {
       unmount();
-      vi.advanceTimersByTime(4000);
+      await vi.advanceTimersByTimeAsync(4000);
     });
 
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
-  it("keeps a single socket after connection opens", () => {
+  it("keeps a single socket after connection opens", async () => {
     renderHook(() => useWebSocket("room-1"));
+
+    await flushAsyncWork();
 
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => {
+    await act(async () => {
       MockWebSocket.instances[0].onopen?.(new Event("open"));
-      vi.advanceTimersByTime(5000);
+      await vi.advanceTimersByTimeAsync(5000);
     });
 
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
-  it("keeps connection open while timers advance", () => {
+  it("keeps connection open while timers advance", async () => {
     renderHook(() => useWebSocket("room-1"));
+
+    await flushAsyncWork();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  it("surfaces connection limit errors before opening a socket", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      json: vi.fn().mockResolvedValue({ code: "too_many_connections" }),
+    });
+
+    const { result } = renderHook(() => useWebSocket("room-1"));
+
+    await flushAsyncWork();
+
+    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(result.current.connectionError).toBe(
+      "This room is already open in 3 tabs or windows for you. Close one and try again."
+    );
+  });
+
+  it("surfaces user-facing socket action errors", async () => {
+    const { result } = renderHook(() => useWebSocket("room-1"));
+
+    await flushAsyncWork();
 
     expect(MockWebSocket.instances).toHaveLength(1);
 
     act(() => {
-      vi.advanceTimersByTime(10 * 60 * 1000);
+      MockWebSocket.instances[0].onmessage?.(
+        new MessageEvent("message", {
+          data: JSON.stringify({ type: "error", error: "Round already revealed" }),
+        })
+      );
     });
 
-    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(result.current.actionError).toBe(
+      "This round is already revealed. Reset the round to vote again."
+    );
   });
 });

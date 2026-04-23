@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
-import { roomNotFoundRedirectPath } from "~/lib/room-join";
+import {
+  ROOM_LOOKUP_ERROR_MESSAGE,
+  roomNotFoundRedirectPath,
+} from "~/lib/room-join";
 
 interface UseRoomExistenceResult {
   roomExists: boolean | null;
+  lookupError: string | null;
+  retryLookup: () => void;
 }
 
 const existenceCache = new Map<string, Promise<{ exists: boolean; title: string | null }>>();
@@ -34,6 +39,8 @@ export function useRoomExistence(
   navigate: (to: string, options?: { replace?: boolean }) => void
 ): UseRoomExistenceResult {
   const [roomExists, setRoomExists] = useState<boolean | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupAttempt, setLookupAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -45,6 +52,7 @@ export function useRoomExistence(
     }
 
     setRoomExists(null);
+    setLookupError(null);
 
     checkRoomExists(trimmedRoomId)
       .then((result) => {
@@ -56,16 +64,21 @@ export function useRoomExistence(
         }
 
         setRoomExists(true);
+        setLookupError(null);
       })
       .catch(() => {
         if (!active) return;
-        navigate(roomNotFoundRedirectPath(), { replace: true });
+        setLookupError(ROOM_LOOKUP_ERROR_MESSAGE);
       });
 
     return () => {
       active = false;
     };
-  }, [roomId, navigate]);
+  }, [roomId, navigate, lookupAttempt]);
 
-  return { roomExists };
+  return {
+    roomExists,
+    lookupError,
+    retryLookup: () => setLookupAttempt((attempt) => attempt + 1),
+  };
 }
