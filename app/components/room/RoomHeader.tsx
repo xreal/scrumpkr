@@ -114,8 +114,8 @@ export function RoomHeader({
   return (
     <header className="border-b-2 border-black">
       <div className="max-w-6xl mx-auto px-4 py-2.5">
-        <div className="flex items-center justify-between gap-3 sm:gap-6 w-full min-w-0">
-        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        <div className="hidden min-[448px]:flex items-center justify-between gap-3 sm:gap-6 w-full min-w-0">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
           <button
             onClick={onLeave}
             className="text-lg sm:text-2xl font-black tracking-tighter hover:opacity-60 transition-opacity flex-shrink-0 cursor-pointer"
@@ -168,6 +168,28 @@ export function RoomHeader({
             <span className="hidden sm:inline">Leave</span>
           </button>
         </div>
+        </div>
+
+        <div className="flex min-[448px]:hidden items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2.5">
+            <button
+              onClick={onLeave}
+              className="text-lg font-black tracking-tighter hover:opacity-60 transition-opacity flex-shrink-0 cursor-pointer"
+              title="Back to startpage"
+            >
+              scrumpkr.
+            </button>
+            <div className="h-6 w-0.5 bg-black block sm:hidden" />
+            <p className="truncate text-sm font-medium tracking-normal text-gray-700">{title || roomId}</p>
+          </div>
+          <button
+            onClick={onLeave}
+            className="flex items-center justify-center border-2 border-black h-10 w-10 hover:bg-black hover:text-white transition-colors flex-shrink-0 cursor-pointer"
+            title="Leave room"
+            aria-label="Leave room"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </header>

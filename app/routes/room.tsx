@@ -474,7 +474,7 @@ export default function Room() {
         onSetName={handleSetName}
         onSetTitle={handleSetTitle}
       />
-      <main className="flex-1 max-w-6xl mx-auto p-4 lg:py-8 mt-4 lg:mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 w-full">
+      <main className="flex-1 max-w-6xl mx-auto p-4 lg:py-8 mt-3 lg:mt-8 grid content-start grid-cols-1 lg:grid-cols-3 gap-8 w-full">
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
@@ -500,15 +500,26 @@ export default function Room() {
               You are watching as a spectator.
             </p>
           )}
+
+          <div className="lg:hidden">
+            <ActionControls
+              revealed={room.currentRound.revealed}
+              onReveal={handleReveal}
+              onReset={handleReset}
+              hasVotes={hasAnyVotes(room.currentRound.votes)}
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-6">
-          <ActionControls
-            revealed={room.currentRound.revealed}
-            onReveal={handleReveal}
-            onReset={handleReset}
-            hasVotes={hasAnyVotes(room.currentRound.votes)}
-          />
+          <div className="hidden lg:block">
+            <ActionControls
+              revealed={room.currentRound.revealed}
+              onReveal={handleReveal}
+              onReset={handleReset}
+              hasVotes={hasAnyVotes(room.currentRound.votes)}
+            />
+          </div>
           <ParticipantList
             participants={room.participants}
             revealed={room.currentRound.revealed}
