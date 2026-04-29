@@ -1,5 +1,6 @@
 export const DECK = [
   "0",
+  "0.5",
   "1",
   "2",
   "3",
@@ -7,7 +8,6 @@ export const DECK = [
   "8",
   "13",
   "21",
-  "coffee",
   "?",
 ] as const;
 
@@ -16,7 +16,7 @@ export type CardValue = (typeof DECK)[number];
 export const VALID_VOTES = new Set<string>(DECK);
 
 export function isNumericCard(v: string): boolean {
-  return v !== "?" && v !== "coffee";
+  return v !== "?";
 }
 
 export function isValidVote(vote?: string | null): boolean {

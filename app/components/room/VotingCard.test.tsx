@@ -10,12 +10,11 @@ describe("VotingCard", () => {
     expect(screen.getByRole("button", { name: "5" })).toBeInTheDocument();
   });
 
-  it("renders coffee card without text 'coffee'", () => {
+  it("renders decimal card values", () => {
     render(
-      <VotingCard value="coffee" selected={false} disabled={false} onSelect={vi.fn()} />
+      <VotingCard value="0.5" selected={false} disabled={false} onSelect={vi.fn()} />
     );
-    const button = screen.getByRole("button");
-    expect(button).not.toHaveTextContent("coffee");
+    expect(screen.getByRole("button", { name: "0.5" })).toBeInTheDocument();
   });
 
   it("calls onSelect with the card value when clicked", () => {

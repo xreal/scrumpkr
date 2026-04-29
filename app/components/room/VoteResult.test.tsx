@@ -20,7 +20,7 @@ describe("VoteResult", () => {
     const participants = [
       makeParticipant({ participantId: "p1", mode: "voter" }),
     ];
-    render(<VoteResult participants={participants} votes={{ p1: "coffee" }} />);
+    render(<VoteResult participants={participants} votes={{ p1: "?" }} />);
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
@@ -54,7 +54,7 @@ describe("VoteResult", () => {
     expect(screen.getByText("5.0")).toBeInTheDocument();
   });
 
-  it("excludes non-numeric votes (coffee, ?) from average", () => {
+  it("excludes non-numeric votes (?) from average", () => {
     const participants = [
       makeParticipant({ participantId: "p1", mode: "voter" }),
       makeParticipant({ participantId: "p2", mode: "voter" }),
@@ -62,7 +62,7 @@ describe("VoteResult", () => {
     render(
       <VoteResult
         participants={participants}
-        votes={{ p1: "5", p2: "coffee" }}
+        votes={{ p1: "5", p2: "?" }}
       />
     );
     expect(screen.getByText("5.0")).toBeInTheDocument();

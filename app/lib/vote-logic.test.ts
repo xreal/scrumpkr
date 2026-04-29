@@ -14,6 +14,7 @@ describe("DECK", () => {
   it("contains the standard planning poker cards", () => {
     expect(DECK).toEqual([
       "0",
+      "0.5",
       "1",
       "2",
       "3",
@@ -21,7 +22,6 @@ describe("DECK", () => {
       "8",
       "13",
       "21",
-      "coffee",
       "?",
     ]);
   });
@@ -114,7 +114,7 @@ describe("aggregateReveal", () => {
 
 describe("computeAverage", () => {
   it("returns em-dash for no numeric votes", () => {
-    expect(computeAverage([null, "?", "coffee"])).toBe("—");
+    expect(computeAverage([null, "?"])).toBe("—");
   });
 
   it("computes average of numeric votes", () => {
@@ -122,7 +122,11 @@ describe("computeAverage", () => {
   });
 
   it("ignores non-numeric cards", () => {
-    expect(computeAverage(["5", "?", "coffee", null])).toBe("5.0");
+    expect(computeAverage(["5", "?", null])).toBe("5.0");
+  });
+
+  it("supports decimal cards", () => {
+    expect(computeAverage(["0", "0.5", "1"])).toBe("0.5");
   });
 });
 
@@ -134,6 +138,5 @@ describe("isNumericCard", () => {
 
   it("returns false for special cards", () => {
     expect(isNumericCard("?")).toBe(false);
-    expect(isNumericCard("coffee")).toBe(false);
   });
 });

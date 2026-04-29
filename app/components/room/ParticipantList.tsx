@@ -1,4 +1,4 @@
-import { Coffee, UserMinus } from "lucide-react";
+import { UserMinus } from "lucide-react";
 import type { Participant } from "~/lib/types";
 
 interface ParticipantListProps {
@@ -90,9 +90,7 @@ export function ParticipantList({
               </span>
               <span className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 border-2 border-black bg-gray-50 text-xs sm:text-sm font-black flex-shrink-0">
                 {revealed
-                  ? vote === "coffee"
-                    ? <Coffee size={16} />
-                    : hasVoted && !isHidden
+                  ? hasVoted && !isHidden
                       ? vote
                       : "—"
                   : hasVoted

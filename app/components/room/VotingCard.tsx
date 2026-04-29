@@ -1,4 +1,4 @@
-import { Coffee, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import type { CardValue } from "~/lib/deck";
 
 interface VotingCardProps {
@@ -26,7 +26,7 @@ export function VotingCard({ value, selected, disabled, onSelect }: VotingCardPr
           <Check size={14} strokeWidth={3} className="text-white sm:w-4 sm:h-4" />
         </span>
       )}
-      {value === "coffee" ? <Coffee size={20} strokeWidth={3} className="sm:w-6 sm:h-6" /> : value}
+      {value}
     </button>
   );
 }
