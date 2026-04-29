@@ -4,7 +4,10 @@ export interface Room {
   updatedAt: number;
   title: string;
   participants: Participant[];
-  currentRound: Round;
+  currentRound: {
+    revealed: boolean;
+    votes: Record<string, string | null>;
+  };
   history: RevealEntry[];
 }
 
@@ -15,11 +18,6 @@ export interface Participant {
   mode: "voter" | "spectator";
   connected: boolean;
   lastSeenAt: number;
-}
-
-export interface Round {
-  revealed: boolean;
-  votes: Record<string, string | null>;
 }
 
 export interface RevealEntry {
@@ -38,24 +36,19 @@ export interface ClientMessage {
   targetId?: string;
 }
 
-export interface RoomStateMessage {
-  type: "room_state";
-  room: Room;
-  yourId?: string;
-  yourVote?: string | null;
-  yourToken?: string;
-}
-
-export interface ErrorMessage {
-  type: "error";
-  error: string;
-}
-
-export interface PokeMessage {
-  type: "poke";
-  fromName: string;
-}
-
-export type ServerMessage = RoomStateMessage | ErrorMessage | PokeMessage;
-
-export type RoomId = string;
+export type ServerMessage =
+  | {
+      type: "room_state";
+      room: Room;
+      yourId?: string;
+      yourVote?: string | null;
+      yourToken?: string;
+    }
+  | {
+      type: "error";
+      error: string;
+    }
+  | {
+      type: "poke";
+      fromName: string;
+    };

@@ -6,6 +6,11 @@ interface SocketMessage {
   [key: string]: unknown;
 }
 
+interface TestRoomState {
+  currentRound: { revealed: boolean; votes: Record<string, string | null> };
+  history: Array<{ aggregation: string }>;
+}
+
 async function nextSocketMessage(
   ws: WebSocket,
   timeoutMs = 1500
@@ -59,18 +64,12 @@ async function nextSocketMessageOfType(
 
 async function nextRoomStateMatching(
   ws: WebSocket,
-  matcher: (room: {
-    currentRound: { revealed: boolean; votes: Record<string, string | null> };
-    history: Array<{ aggregation: string }>;
-  }) => boolean,
+  matcher: (room: TestRoomState) => boolean,
   attempts = 20
 ) {
   for (let index = 0; index < attempts; index++) {
     const message = await nextSocketMessageOfType(ws, "room_state");
-    const room = message.room as {
-      currentRound: { revealed: boolean; votes: Record<string, string | null> };
-      history: Array<{ aggregation: string }>;
-    };
+    const room = message.room as TestRoomState;
     if (matcher(room)) {
       return room;
     }
@@ -92,6 +91,81 @@ async function drainSocketMessages(ws: WebSocket, maxMessages = 20): Promise<voi
   }
 }
 
+async function createRoom(title: string): Promise<string> {
+  const createResponse = await exports.default.fetch(
+    new Request("http://test/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+  );
+
+  expect(createResponse.status).toBe(200);
+  const { roomId } = (await createResponse.json()) as { roomId: string };
+  return roomId;
+}
+
+function websocketRequest(roomId: string, participantId: string, token: string): Request {
+  return new Request(
+    `http://test/ws/${roomId}?participantId=${participantId}&token=${token}`,
+    { headers: { Upgrade: "websocket" } }
+  );
+}
+
+async function connectParticipantSocket(
+  roomId: string,
+  participantId: string,
+  token: string
+): Promise<WebSocket> {
+  const wsResponse = await exports.default.fetch(
+    websocketRequest(roomId, participantId, token)
+  );
+
+  expect(wsResponse.status).toBe(101);
+  expect(wsResponse.webSocket).toBeDefined();
+
+  const ws = wsResponse.webSocket as WebSocket;
+  ws.accept();
+  await nextSocketMessageOfType(ws, "room_state");
+  return ws;
+}
+
+function sendAction(ws: WebSocket, action: Record<string, unknown>): void {
+  ws.send(JSON.stringify(action));
+}
+
+async function joinAsVoter(ws: WebSocket, participantId: string, name: string): Promise<void> {
+  sendAction(ws, {
+    action: "join",
+    participantId,
+    name,
+    mode: "voter",
+  });
+
+  await nextRoomStateMatching(
+    ws,
+    (room) => room.currentRound.votes[participantId] === null
+  );
+}
+
+async function setupVoterSession(
+  title: string,
+  participantId: string,
+  token: string,
+  name: string
+): Promise<{ roomId: string; ws: WebSocket }> {
+  const roomId = await createRoom(title);
+  const ws = await connectParticipantSocket(roomId, participantId, token);
+  await joinAsVoter(ws, participantId, name);
+  return { roomId, ws };
+}
+
+async function expectNoSocketMessage(ws: WebSocket, timeoutMs = 300): Promise<void> {
+  await expect(nextSocketMessage(ws, timeoutMs)).rejects.toThrow(
+    "Timed out waiting for WebSocket message"
+  );
+}
+
 describe("Worker API", () => {
   it("creates a room and returns roomId", async () => {
     const request = new Request("http://test/api/rooms", {
@@ -110,16 +184,10 @@ describe("Worker API", () => {
   });
 
   it("returns exists=true only for already created rooms", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Sprint 42" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const created = (await createResponse.json()) as { roomId: string };
+    const roomId = await createRoom("Sprint 42");
 
     const existingRequest = new Request(
-      `http://test/api/rooms/exists?roomId=${created.roomId}`
+      `http://test/api/rooms/exists?roomId=${roomId}`
     );
     const existingResponse = await exports.default.fetch(existingRequest);
     expect(existingResponse.status).toBe(200);
@@ -132,31 +200,14 @@ describe("Worker API", () => {
   });
 
   it("returns a user-facing connection limit error before websocket upgrade", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Connection Limits" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
+    const roomId = await createRoom("Connection Limits");
 
     const sockets: WebSocket[] = [];
 
     for (let index = 0; index < 3; index++) {
-      const wsResponse = await exports.default.fetch(
-        new Request(
-          `http://test/ws/${roomId}?participantId=tester-limit&token=test-token-limit`,
-          { headers: { Upgrade: "websocket" } }
-        )
+      sockets.push(
+        await connectParticipantSocket(roomId, "tester-limit", "test-token-limit")
       );
-
-      expect(wsResponse.status).toBe(101);
-      expect(wsResponse.webSocket).toBeDefined();
-
-      const ws = wsResponse.webSocket as WebSocket;
-      ws.accept();
-      await nextSocketMessageOfType(ws, "room_state");
-      sockets.push(ws);
     }
 
     const connectCheckResponse = await exports.default.fetch(
@@ -208,59 +259,27 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("rejects vote changes after reveal", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Reveal Lock" }),
+    const { ws } = await setupVoterSession(
+      "Reveal Lock",
+      "tester-1",
+      "test-token-1",
+      "Tester"
+    );
+
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-1",
+      vote: "3",
     });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-1&token=test-token-1`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    expect(wsResponse.webSocket).toBeDefined();
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-1",
-        name: "Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-1"] === null
-    );
-
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-1",
-        vote: "3",
-      })
-    );
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.votes["tester-1"] === "3" && !room.currentRound.revealed
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "reveal",
-        participantId: "tester-1",
-      })
-    );
+    sendAction(ws, {
+      action: "reveal",
+      participantId: "tester-1",
+    });
     const revealRoom = await nextRoomStateMatching(
       ws,
       (room) =>
@@ -273,13 +292,11 @@ describe("PokerRoom Durable Object", () => {
     expect(revealRoom.currentRound.votes["tester-1"]).toBe("3");
     expect(revealRoom.history[0]?.aggregation).toBe("1x3");
 
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-1",
-        vote: "5",
-      })
-    );
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-1",
+      vote: "5",
+    });
     const errorMessage = await nextSocketMessageOfType(ws, "error");
     expect(errorMessage.error).toBe("Round already revealed");
 
@@ -287,59 +304,27 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("does not duplicate history when reveal is retried", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Idempotent Reveal" }),
+    const { ws } = await setupVoterSession(
+      "Idempotent Reveal",
+      "tester-2",
+      "test-token-2",
+      "Tester"
+    );
+
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-2",
+      vote: "3",
     });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-2&token=test-token-2`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    expect(wsResponse.webSocket).toBeDefined();
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-2",
-        name: "Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-2"] === null
-    );
-
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-2",
-        vote: "3",
-      })
-    );
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.votes["tester-2"] === "3" && !room.currentRound.revealed
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "reveal",
-        participantId: "tester-2",
-      })
-    );
+    sendAction(ws, {
+      action: "reveal",
+      participantId: "tester-2",
+    });
     await nextRoomStateMatching(
       ws,
       (room) =>
@@ -348,19 +333,15 @@ describe("PokerRoom Durable Object", () => {
         room.history[0]?.aggregation === "1x3"
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "reveal",
-        participantId: "tester-2",
-      })
-    );
+    sendAction(ws, {
+      action: "reveal",
+      participantId: "tester-2",
+    });
 
-    ws.send(
-      JSON.stringify({
-        action: "reset_round",
-        participantId: "tester-2",
-      })
-    );
+    sendAction(ws, {
+      action: "reset_round",
+      participantId: "tester-2",
+    });
 
     const roomAfterReset = await nextRoomStateMatching(
       ws,
@@ -374,69 +355,36 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("clears reveal history entries", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Clear History" }),
+    const { ws } = await setupVoterSession(
+      "Clear History",
+      "tester-clear",
+      "test-token-clear",
+      "Clear Tester"
+    );
+
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-clear",
+      vote: "5",
     });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-clear&token=test-token-clear`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-clear",
-        name: "Clear Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-clear"] === null
-    );
-
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-clear",
-        vote: "5",
-      })
-    );
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.votes["tester-clear"] === "5"
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "reveal",
-        participantId: "tester-clear",
-      })
-    );
+    sendAction(ws, {
+      action: "reveal",
+      participantId: "tester-clear",
+    });
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.revealed && room.history[0]?.aggregation === "1x5"
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "clear_history",
-        participantId: "tester-clear",
-      })
-    );
+    sendAction(ws, {
+      action: "clear_history",
+      participantId: "tester-clear",
+    });
 
     const roomAfterClear = await nextRoomStateMatching(
       ws,
@@ -450,52 +398,16 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("does not broadcast to existing clients on connect-only events", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "No Connect Broadcast" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
+    const roomId = await createRoom("No Connect Broadcast");
 
-    const wsAResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-a&token=test-token-a`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-    expect(wsAResponse.status).toBe(101);
-    const wsA = wsAResponse.webSocket as WebSocket;
-    wsA.accept();
-    await nextSocketMessageOfType(wsA, "room_state");
-
-    wsA.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-a",
-        name: "A",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      wsA,
-      (room) => room.currentRound.votes["tester-a"] === null
-    );
+    const wsA = await connectParticipantSocket(roomId, "tester-a", "test-token-a");
+    await joinAsVoter(wsA, "tester-a", "A");
 
     await drainSocketMessages(wsA);
 
     const unexpectedMessageForA = nextSocketMessage(wsA, 400);
 
-    const wsBResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-b&token=test-token-b`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-    expect(wsBResponse.status).toBe(101);
-    const wsB = wsBResponse.webSocket as WebSocket;
-    wsB.accept();
-    await nextSocketMessageOfType(wsB, "room_state");
+    const wsB = await connectParticipantSocket(roomId, "tester-b", "test-token-b");
 
     await expect(unexpectedMessageForA).rejects.toThrow(
       "Timed out waiting for WebSocket message"
@@ -506,105 +418,34 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("ignores duplicate reset when round is already clean", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Reset Idempotency" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-reset&token=test-token-reset`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-reset",
-        name: "Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-reset"] === null
+    const { ws } = await setupVoterSession(
+      "Reset Idempotency",
+      "tester-reset",
+      "test-token-reset",
+      "Tester"
     );
 
     await drainSocketMessages(ws);
 
-    ws.send(
-      JSON.stringify({
-        action: "reset_round",
-        participantId: "tester-reset",
-      })
-    );
+    sendAction(ws, {
+      action: "reset_round",
+      participantId: "tester-reset",
+    });
 
-    await expect(nextSocketMessage(ws, 300)).rejects.toThrow(
-      "Timed out waiting for WebSocket message"
-    );
+    await expectNoSocketMessage(ws);
 
     ws.close();
   });
 
   it("limits sockets per participant to avoid fan-out abuse", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Socket Limits" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
+    const roomId = await createRoom("Socket Limits");
 
-    const ws1Response = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=abuser&token=shared-token`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-    const ws2Response = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=abuser&token=shared-token`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-    const ws3Response = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=abuser&token=shared-token`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(ws1Response.status).toBe(101);
-    expect(ws2Response.status).toBe(101);
-    expect(ws3Response.status).toBe(101);
-
-    const ws1 = ws1Response.webSocket as WebSocket;
-    const ws2 = ws2Response.webSocket as WebSocket;
-    const ws3 = ws3Response.webSocket as WebSocket;
-
-    ws1.accept();
-    ws2.accept();
-    ws3.accept();
-
-    await nextSocketMessageOfType(ws1, "room_state");
-    await nextSocketMessageOfType(ws2, "room_state");
-    await nextSocketMessageOfType(ws3, "room_state");
+    const ws1 = await connectParticipantSocket(roomId, "abuser", "shared-token");
+    const ws2 = await connectParticipantSocket(roomId, "abuser", "shared-token");
+    const ws3 = await connectParticipantSocket(roomId, "abuser", "shared-token");
 
     const ws4Response = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=abuser&token=shared-token`,
-        { headers: { Upgrade: "websocket" } }
-      )
+      websocketRequest(roomId, "abuser", "shared-token")
     );
 
     expect(ws4Response.status).toBe(429);
@@ -615,89 +456,43 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("ignores duplicate join retries when participant data is unchanged", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Join Idempotency" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-join&token=test-token-join`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-join",
-        name: "Join Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-join"] === null
+    const { ws } = await setupVoterSession(
+      "Join Idempotency",
+      "tester-join",
+      "test-token-join",
+      "Join Tester"
     );
 
     await drainSocketMessages(ws);
 
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-join",
-        name: "Join Tester",
-        mode: "voter",
-      })
-    );
+    sendAction(ws, {
+      action: "join",
+      participantId: "tester-join",
+      name: "Join Tester",
+      mode: "voter",
+    });
 
-    await expect(nextSocketMessage(ws, 300)).rejects.toThrow(
-      "Timed out waiting for WebSocket message"
-    );
+    await expectNoSocketMessage(ws);
 
     ws.close();
   });
 
   it("limits total active sockets per room", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Room Socket Limits" }),
-    });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
+    const roomId = await createRoom("Room Socket Limits");
 
     const sockets: WebSocket[] = [];
 
     for (let index = 0; index < 50; index++) {
-      const wsResponse = await exports.default.fetch(
-        new Request(
-          `http://test/ws/${roomId}?participantId=room-socket-${index}&token=token-${index}`,
-          { headers: { Upgrade: "websocket" } }
-        )
+      const ws = await connectParticipantSocket(
+        roomId,
+        `room-socket-${index}`,
+        `token-${index}`
       );
-
-      expect(wsResponse.status).toBe(101);
-      const ws = wsResponse.webSocket as WebSocket;
-      ws.accept();
-      await nextSocketMessageOfType(ws, "room_state");
       sockets.push(ws);
     }
 
     const overflowResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=room-socket-overflow&token=token-overflow`,
-        { headers: { Upgrade: "websocket" } }
-      )
+      websocketRequest(roomId, "room-socket-overflow", "token-overflow")
     );
 
     expect(overflowResponse.status).toBe(429);
@@ -708,47 +503,18 @@ describe("PokerRoom Durable Object", () => {
   });
 
   it("ignores duplicate vote retries with same value", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Vote Idempotency" }),
+    const { ws } = await setupVoterSession(
+      "Vote Idempotency",
+      "tester-vote",
+      "test-token-vote",
+      "Vote Tester"
+    );
+
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-vote",
+      vote: "5",
     });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-vote&token=test-token-vote`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-vote",
-        name: "Vote Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-vote"] === null
-    );
-
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-vote",
-        vote: "5",
-      })
-    );
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.votes["tester-vote"] === "5"
@@ -756,86 +522,49 @@ describe("PokerRoom Durable Object", () => {
 
     await drainSocketMessages(ws);
 
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-vote",
-        vote: "5",
-      })
-    );
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-vote",
+      vote: "5",
+    });
 
-    await expect(nextSocketMessage(ws, 300)).rejects.toThrow(
-      "Timed out waiting for WebSocket message"
-    );
+    await expectNoSocketMessage(ws);
 
     ws.close();
   });
 
   it("excludes spectator votes from reveal aggregation", async () => {
-    const createRequest = new Request("http://test/api/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Spectator Aggregation" }),
+    const { ws } = await setupVoterSession(
+      "Spectator Aggregation",
+      "tester-spec",
+      "test-token-spec",
+      "Spec Tester"
+    );
+
+    sendAction(ws, {
+      action: "vote",
+      participantId: "tester-spec",
+      vote: "5",
     });
-    const createResponse = await exports.default.fetch(createRequest);
-    const { roomId } = (await createResponse.json()) as { roomId: string };
-
-    const wsResponse = await exports.default.fetch(
-      new Request(
-        `http://test/ws/${roomId}?participantId=tester-spec&token=test-token-spec`,
-        { headers: { Upgrade: "websocket" } }
-      )
-    );
-
-    expect(wsResponse.status).toBe(101);
-    const ws = wsResponse.webSocket as WebSocket;
-    ws.accept();
-
-    await nextSocketMessageOfType(ws, "room_state");
-
-    ws.send(
-      JSON.stringify({
-        action: "join",
-        participantId: "tester-spec",
-        name: "Spec Tester",
-        mode: "voter",
-      })
-    );
-    await nextRoomStateMatching(
-      ws,
-      (room) => room.currentRound.votes["tester-spec"] === null
-    );
-
-    ws.send(
-      JSON.stringify({
-        action: "vote",
-        participantId: "tester-spec",
-        vote: "5",
-      })
-    );
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.votes["tester-spec"] === "5"
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "set_mode",
-        participantId: "tester-spec",
-        mode: "spectator",
-      })
-    );
+    sendAction(ws, {
+      action: "set_mode",
+      participantId: "tester-spec",
+      mode: "spectator",
+    });
     await nextRoomStateMatching(
       ws,
       (room) => room.currentRound.votes["tester-spec"] === null
     );
 
-    ws.send(
-      JSON.stringify({
-        action: "reveal",
-        participantId: "tester-spec",
-      })
-    );
+    sendAction(ws, {
+      action: "reveal",
+      participantId: "tester-spec",
+    });
 
     const revealedRoom = await nextRoomStateMatching(
       ws,

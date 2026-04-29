@@ -115,6 +115,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function hasExistingRoom(roomData: RoomData, requestedRoomId?: string): boolean {
+  return (
+    !!requestedRoomId &&
+    roomData.createdAt > 0 &&
+    roomData.roomId === requestedRoomId
+  );
+}
+
 export class PokerRoom implements DurableObject {
   private state: DurableObjectState;
   private storage: DurableObjectStorage;
@@ -296,10 +304,7 @@ export class PokerRoom implements DurableObject {
     });
 
     const requestedRoomId = url.searchParams.get("roomId")?.trim();
-    const exists =
-      !!requestedRoomId &&
-      this.roomData.createdAt > 0 &&
-      this.roomData.roomId === requestedRoomId;
+    const exists = hasExistingRoom(this.roomData, requestedRoomId);
 
     return jsonResponse({
       exists,
@@ -315,10 +320,7 @@ export class PokerRoom implements DurableObject {
     const requestedRoomId = url.searchParams.get("roomId")?.trim();
     const participantId = url.searchParams.get("participantId")?.trim() || "";
     const participantToken = url.searchParams.get("token")?.trim() || "";
-    const roomExists =
-      !!requestedRoomId &&
-      this.roomData.createdAt > 0 &&
-      this.roomData.roomId === requestedRoomId;
+    const roomExists = hasExistingRoom(this.roomData, requestedRoomId);
 
     if (!roomExists) {
       return jsonResponse(
