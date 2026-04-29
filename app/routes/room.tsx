@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Github } from "lucide-react";
 import { ActionControls } from "~/components/room/ActionControls";
@@ -9,45 +9,16 @@ import { RoomHeader } from "~/components/room/RoomHeader";
 import { SpectatorToggle } from "~/components/room/SpectatorToggle";
 import { VoteResult } from "~/components/room/VoteResult";
 import { VotingCard } from "~/components/room/VotingCard";
+import { useAutoJoinRoom } from "~/hooks/useAutoJoinRoom";
 import { useRoomExistence } from "~/hooks/useRoomExistence";
 import { useRoomIdentity, type ParticipantMode } from "~/hooks/useRoomIdentity";
+import { useRoomPokeFeedback } from "~/hooks/useRoomPokeFeedback";
+import { useRoomActions } from "~/hooks/useRoomActions";
 import { useWebSocket } from "~/hooks/useWebSocket";
-import { DECK, type CardValue } from "~/lib/deck";
+import { DECK } from "~/lib/deck";
 
 function hasAnyVotes(votes: Record<string, string | null>): boolean {
   return Object.values(votes).some((vote) => vote !== null && vote !== undefined);
-}
-
-function playPokeSound(): void {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(660, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
-
-    gain.gain.setValueAtTime(0.03, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.12);
-  } catch {
-    // ignore audio errors
-  }
-}
-
-function getBaseTitle(roomTitle: string | undefined, roomId: string | undefined): string {
-  if (roomTitle) {
-    return `scrumpkr > ${roomTitle}`;
-  }
-  if (roomId) {
-    return `scrumpkr > ${roomId}`;
-  }
-  return "scrumpkr.";
 }
 
 interface RoomStatusProps {
@@ -156,40 +127,7 @@ function ConfirmNameView({ nameInput, onNameInputChange, onSubmit }: ConfirmName
 export default function Room() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const pokeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const roomTitleRef = useRef<string | undefined>(undefined);
-
-  const handlePoke = useCallback(
-    (fromName: string) => {
-      playPokeSound();
-      if (pokeIntervalRef.current) {
-        clearInterval(pokeIntervalRef.current);
-      }
-      const baseTitle = getBaseTitle(roomTitleRef.current, roomId);
-      let count = 0;
-      pokeIntervalRef.current = setInterval(() => {
-        document.title =
-          count % 2 === 0 ? `📢 ${fromName} poked you!` : baseTitle;
-        count++;
-        if (count >= 6) {
-          if (pokeIntervalRef.current) {
-            clearInterval(pokeIntervalRef.current);
-            pokeIntervalRef.current = null;
-          }
-          document.title = baseTitle;
-        }
-      }, 500);
-    },
-    [roomId]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (pokeIntervalRef.current) {
-        clearInterval(pokeIntervalRef.current);
-      }
-    };
-  }, []);
+  const { handlePoke, syncDocumentTitle } = useRoomPokeFeedback({ roomId });
 
   const { roomExists, lookupError, retryLookup } = useRoomExistence(roomId, navigate);
   const {
@@ -203,7 +141,6 @@ export default function Room() {
     retryConnection,
   } = useWebSocket(roomExists ? roomId || null : null, handlePoke);
 
-  roomTitleRef.current = room?.title;
   const {
     name,
     nameInput,
@@ -218,7 +155,6 @@ export default function Room() {
   } = useRoomIdentity(roomId);
 
   const [myVote, setMyVote] = useState<string | null>(null);
-  const [joinRequested, setJoinRequested] = useState(false);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
 
   const me = room?.participants.find((participant) => participant.participantId === myId);
@@ -226,41 +162,14 @@ export default function Room() {
 
   useEffect(() => {
     setMyVote(null);
-    setJoinRequested(false);
   }, [roomId]);
 
   useEffect(() => {
-    if (pokeIntervalRef.current) return;
-    document.title = getBaseTitle(room?.title, roomId);
-  }, [room?.title, roomId]);
+    syncDocumentTitle(room?.title);
+  }, [room?.title, syncDocumentTitle]);
 
-  useEffect(() => {
-    if (!connected) {
-      setJoinRequested(false);
-    }
-  }, [connected]);
-
-  useEffect(() => {
-    if (!room || !myId || !connected || !identityLoaded || !nameConfirmed) {
-      return;
-    }
-
-    const trimmedName = name.trim();
-    if (!trimmedName || joinRequested) {
-      return;
-    }
-
-    const isParticipantInRoom = room.participants.some(
-      (participant) => participant.participantId === myId
-    );
-    if (isParticipantInRoom) {
-      setJoinRequested(false);
-      return;
-    }
-
-    send({ action: "join", participantId: myId, name: trimmedName, mode });
-    setJoinRequested(true);
-  }, [
+  useAutoJoinRoom({
+    roomId,
     room,
     myId,
     connected,
@@ -268,9 +177,8 @@ export default function Room() {
     nameConfirmed,
     name,
     mode,
-    joinRequested,
     send,
-  ]);
+  });
 
   useEffect(() => {
     if (!room?.currentRound.votes || !myId) {
@@ -292,6 +200,28 @@ export default function Room() {
     syncFromParticipantName(me?.name);
   }, [me?.name, syncFromParticipantName]);
 
+  const {
+    handleVote,
+    handleReveal,
+    handleReset,
+    handleClearHistory,
+    handleSetName,
+    handleSetMode,
+    handleSetTitle,
+    handleRemoveParticipant,
+    handleSendPoke,
+    handleLeave,
+  } = useRoomActions({
+    myId,
+    myVote,
+    isRoundRevealed: !!room?.currentRound.revealed,
+    send,
+    setMyVote,
+    updateName,
+    updateMode,
+    navigate,
+  });
+
   const handleConfirmName = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -299,106 +229,6 @@ export default function Room() {
     },
     [confirmName]
   );
-
-  const handleVote = useCallback(
-    (value: CardValue) => {
-      if (!myId || room?.currentRound.revealed) {
-        return;
-      }
-
-      const newVote = myVote === value ? null : value;
-      setMyVote(newVote);
-      send({ action: "vote", participantId: myId, vote: newVote });
-    },
-    [myId, room?.currentRound.revealed, myVote, send]
-  );
-
-  const handleReveal = useCallback(() => {
-    if (!myId) {
-      return;
-    }
-
-    send({ action: "reveal", participantId: myId });
-  }, [myId, send]);
-
-  const handleReset = useCallback(() => {
-    if (!myId) {
-      return;
-    }
-
-    setMyVote(null);
-    send({ action: "reset_round", participantId: myId });
-  }, [myId, send]);
-
-  const handleClearHistory = useCallback(() => {
-    if (!myId) {
-      return;
-    }
-
-    send({ action: "clear_history", participantId: myId });
-  }, [myId, send]);
-
-  const handleSetName = useCallback(
-    (newName: string) => {
-      if (!myId) {
-        return;
-      }
-
-      const trimmedName = updateName(newName);
-      if (!trimmedName) {
-        return;
-      }
-
-      send({ action: "set_name", participantId: myId, name: trimmedName });
-    },
-    [myId, updateName, send]
-  );
-
-  const handleSetMode = useCallback(
-    (newMode: ParticipantMode) => {
-      if (!myId) {
-        return;
-      }
-
-      updateMode(newMode);
-      send({ action: "set_mode", participantId: myId, mode: newMode });
-    },
-    [myId, updateMode, send]
-  );
-
-  const handleSetTitle = useCallback(
-    (title: string) => {
-      if (!myId) {
-        return;
-      }
-
-      send({ action: "set_title", participantId: myId, title });
-    },
-    [myId, send]
-  );
-
-  const handleRemoveParticipant = useCallback(
-    (removeId: string) => {
-      if (!myId) {
-        return;
-      }
-
-      send({ action: "remove_participant", participantId: myId, removeId });
-    },
-    [myId, send]
-  );
-
-  const handleSendPoke = useCallback(
-    (targetId: string) => {
-      if (!myId) return;
-      send({ action: "poke", participantId: myId, targetId });
-    },
-    [myId, send]
-  );
-
-  const handleLeave = useCallback(() => {
-    navigate("/");
-  }, [navigate]);
 
   if (lookupError) {
     return (
