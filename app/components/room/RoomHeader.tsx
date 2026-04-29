@@ -1,5 +1,5 @@
 import { LogOut, User } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEventHandler } from "react";
 import { CopyButton } from "~/components/ui/CopyButton";
 
 interface RoomHeaderProps {
@@ -95,8 +95,8 @@ export function RoomHeader({
     [onSetName, userName]
   );
 
-  const handleNameKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleNameKeyDown: KeyboardEventHandler<HTMLInputElement> = useCallback(
+    (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         commitNameChange(nameDraft);

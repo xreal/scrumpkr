@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type SubmitEventHandler } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Github } from "lucide-react";
 import { ActionControls } from "~/components/room/ActionControls";
@@ -84,7 +84,7 @@ function RoomBanner({ message }: { message: string }) {
 interface ConfirmNameViewProps {
   nameInput: string;
   onNameInputChange: (value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: SubmitEventHandler<HTMLFormElement>;
 }
 
 function ConfirmNameView({ nameInput, onNameInputChange, onSubmit }: ConfirmNameViewProps) {
@@ -222,8 +222,8 @@ export default function Room() {
     navigate,
   });
 
-  const handleConfirmName = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+  const handleConfirmName: SubmitEventHandler<HTMLFormElement> = useCallback(
+    (event) => {
       event.preventDefault();
       confirmName();
     },

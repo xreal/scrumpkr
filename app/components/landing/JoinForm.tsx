@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type SubmitEventHandler } from "react";
 import { getDisplayName } from "~/lib/storage";
 
 interface JoinFormProps {
@@ -26,8 +26,8 @@ export function JoinForm({
     if (stored) setName(stored);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit: SubmitEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
     if (!name.trim()) return;
     onClearError?.();
     onSubmit(name.trim(), roomCode.trim() || undefined);
