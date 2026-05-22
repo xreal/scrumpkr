@@ -1,15 +1,15 @@
-import { Copy, Check } from "lucide-react";
+import { Share, Check } from "lucide-react";
 import { useState } from "react";
 
-interface CopyButtonProps {
+interface ShareButtonProps {
   text: string;
   label?: string;
 }
 
-export function CopyButton({ text, label }: CopyButtonProps) {
+export function ShareButton({ text, label }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
+  const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -19,11 +19,11 @@ export function CopyButton({ text, label }: CopyButtonProps) {
 
   return (
     <button
-      onClick={handleCopy}
+      onClick={handleShare}
       className="flex items-center gap-1.5 hover:bg-black hover:text-white p-1.5 transition-colors cursor-pointer"
-      title={label || "Copy"}
+      title={label || "Share"}
     >
-      {copied ? <Check size={16} /> : <Copy size={16} />}
+      {copied ? <Check size={16} /> : <Share size={16} />}
     </button>
   );
 }

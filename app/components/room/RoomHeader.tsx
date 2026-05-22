@@ -1,6 +1,6 @@
 import { LogOut, User } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CopyButton } from "~/components/ui/CopyButton";
+import { ShareButton } from "~/components/ui/ShareButton";
 
 interface RoomHeaderProps {
   title: string;
@@ -134,7 +134,7 @@ export function RoomHeader({
               className="bg-transparent border-none outline-none font-bold text-sm sm:text-base flex-1 min-w-0 px-2 sm:px-3"
             />
             <div className="h-full border-l-2 border-black flex items-center justify-center px-1 sm:px-1.5">
-              <CopyButton text={shareUrl} label="Copy share link" />
+              <ShareButton text={shareUrl} label="Share room link" />
             </div>
           </div>
         </div>
