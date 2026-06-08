@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { UserMinus } from "lucide-react";
+import { isParticipantVisuallyInactive } from "~/lib/participant";
 import type { Participant } from "~/lib/types";
 
 interface ParticipantListProps {
@@ -18,6 +20,18 @@ export function ParticipantList({
   onOpenRemove,
   onPoke,
 }: ParticipantListProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const hasDisconnected = participants.some((participant) => !participant.connected);
+    if (!hasDisconnected) {
+      return;
+    }
+
+    const intervalId = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(intervalId);
+  }, [participants]);
+
   return (
     <div className="border-2 border-black p-4">
       <div className="flex items-center justify-between border-b-2 border-black pb-2 mb-3 gap-2">
@@ -26,7 +40,7 @@ export function ParticipantList({
         </h3>
         <button
           onClick={onOpenRemove}
-          className="flex items-center gap-1 border-2 border-black px-2 py-1 text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors flex-shrink-0"
+          className="flex items-center gap-1 border-2 border-black px-2 py-1 text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors shrink-0"
           title="Remove participants"
         >
           <UserMinus size={14} />
@@ -39,6 +53,7 @@ export function ParticipantList({
           const isMe = p.participantId === myId;
           const hasVoted = vote !== null && vote !== undefined;
           const isHidden = vote === "hidden";
+          const isVisuallyInactive = isParticipantVisuallyInactive(p, now);
 
           const canPoke =
             !revealed &&
@@ -50,11 +65,13 @@ export function ParticipantList({
           return (
             <li
               key={p.participantId}
-              className="flex items-center justify-between gap-2 text-sm font-bold"
+              className={`flex items-center justify-between gap-2 text-sm font-bold transition-opacity ${
+                isVisuallyInactive ? "opacity-40 text-gray-500" : ""
+              }`}
             >
               <span className="flex items-center gap-2 min-w-0">
                 <span
-                  className={`inline-block h-2 w-2 rounded-full border border-black flex-shrink-0 ${
+                  className={`inline-block h-2 w-2 rounded-full border border-black shrink-0 ${
                     p.connected ? "bg-green-500" : "bg-gray-400"
                   }`}
                   title={p.connected ? "Online" : "Inactive"}
@@ -83,12 +100,12 @@ export function ParticipantList({
                   </span>
                 )}
                 {p.mode === "spectator" && (
-                  <span className="text-xs font-medium bg-gray-200 px-1.5 py-0.5 flex-shrink-0">
+                  <span className="text-xs font-medium bg-gray-200 px-1.5 py-0.5 shrink-0">
                     Spectator
                   </span>
                 )}
               </span>
-              <span className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 border-2 border-black bg-gray-50 text-xs sm:text-sm font-black flex-shrink-0">
+              <span className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 border-2 border-black bg-gray-50 text-xs sm:text-sm font-black shrink-0">
                 {revealed
                   ? hasVoted && !isHidden
                       ? vote

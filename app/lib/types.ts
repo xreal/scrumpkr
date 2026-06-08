@@ -33,6 +33,7 @@ export interface ClientMessage {
   title?: string;
   vote?: string | null;
   removeId?: string;
+  removeIds?: string[];
   targetId?: string;
 }
 

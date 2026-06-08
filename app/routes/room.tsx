@@ -208,7 +208,7 @@ export default function Room() {
     handleSetName,
     handleSetMode,
     handleSetTitle,
-    handleRemoveParticipant,
+    handleRemoveParticipants,
     handleSendPoke,
     handleLeave,
   } = useRoomActions({
@@ -370,7 +370,7 @@ export default function Room() {
         onClose={() => setRemoveModalOpen(false)}
         participants={room.participants}
         myId={myId}
-        onRemove={handleRemoveParticipant}
+        onRemove={handleRemoveParticipants}
       />
 
       <footer className="mt-auto border-t-2 border-black bg-white sticky bottom-0">

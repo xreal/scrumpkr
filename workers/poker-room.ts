@@ -1,4 +1,5 @@
 import type { ClientMessage, Room } from "../app/lib/types";
+import { OFFLINE_PARTICIPANT_TTL_MS } from "../app/lib/participant";
 import {
   aggregateReveal,
   isValidVote,
@@ -12,7 +13,6 @@ const ROOM_EXISTS_PATH = "/api/rooms/exists";
 const ROOM_CONNECT_PATH = "/api/rooms/connect";
 
 const HISTORY_LIMIT = 10;
-const OFFLINE_PARTICIPANT_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const MAX_SOCKETS_PER_PARTICIPANT = 3;
 const MAX_SOCKETS_PER_ROOM = 50;
 
@@ -712,23 +712,37 @@ export class PokerRoom implements DurableObject {
     data: IncomingClientMessage,
     wsParticipantId: string
   ): ActionResult {
-    if (!data.removeId) {
+    const removeIds = [
+      ...(data.removeIds ?? []),
+      ...(data.removeId ? [data.removeId] : []),
+    ].filter((participantId) => participantId !== wsParticipantId);
+
+    const uniqueRemoveIds = [...new Set(removeIds)];
+    if (uniqueRemoveIds.length === 0) {
       return { changed: false };
     }
 
-    const target = this.getParticipant(data.removeId);
-    if (!target || target.participantId === wsParticipantId) {
-      return { changed: false };
-    }
-
-    this.roomData.participants = this.roomData.participants.filter(
-      (participant) => participant.participantId !== data.removeId
+    const idsToRemove = uniqueRemoveIds.filter((participantId) =>
+      Boolean(this.getParticipant(participantId))
     );
-    delete this.roomData.currentRound.votes[data.removeId];
+    if (idsToRemove.length === 0) {
+      return { changed: false };
+    }
+
+    const removeSet = new Set(idsToRemove);
+    this.roomData.participants = this.roomData.participants.filter(
+      (participant) => !removeSet.has(participant.participantId)
+    );
+
+    for (const participantId of idsToRemove) {
+      delete this.roomData.currentRound.votes[participantId];
+    }
 
     return {
       changed: true,
-      socketsToClose: this.getSocketsForParticipant(data.removeId),
+      socketsToClose: idsToRemove.flatMap((participantId) =>
+        this.getSocketsForParticipant(participantId)
+      ),
     };
   }
 

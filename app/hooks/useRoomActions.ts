@@ -22,7 +22,7 @@ interface UseRoomActionsResult {
   handleSetName: (newName: string) => void;
   handleSetMode: (newMode: ParticipantMode) => void;
   handleSetTitle: (title: string) => void;
-  handleRemoveParticipant: (removeId: string) => void;
+  handleRemoveParticipants: (removeIds: string[]) => void;
   handleSendPoke: (targetId: string) => void;
   handleLeave: () => void;
 }
@@ -114,13 +114,17 @@ export function useRoomActions({
     [myId, send]
   );
 
-  const handleRemoveParticipant = useCallback(
-    (removeId: string) => {
-      if (!myId) {
+  const handleRemoveParticipants = useCallback(
+    (removeIds: string[]) => {
+      if (!myId || removeIds.length === 0) {
         return;
       }
 
-      send({ action: "remove_participant", participantId: myId, removeId });
+      send({
+        action: "remove_participant",
+        participantId: myId,
+        removeIds,
+      });
     },
     [myId, send]
   );
@@ -147,7 +151,7 @@ export function useRoomActions({
     handleSetName,
     handleSetMode,
     handleSetTitle,
-    handleRemoveParticipant,
+    handleRemoveParticipants,
     handleSendPoke,
     handleLeave,
   };

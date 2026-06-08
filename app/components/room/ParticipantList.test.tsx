@@ -145,6 +145,38 @@ describe("ParticipantList", () => {
     expect(screen.queryByTitle("Poke Bob to vote")).not.toBeInTheDocument();
   });
 
+  it("applies faded styling when disconnected for 30+ seconds", () => {
+    const now = Date.now();
+    const participants = [
+      makeParticipant({
+        participantId: "p2",
+        name: "Bob",
+        connected: false,
+        lastSeenAt: now - 31_000,
+      }),
+    ];
+    const { container } = render(
+      <ParticipantList {...defaultProps} participants={participants} />
+    );
+    expect(container.querySelector("li")).toHaveClass("opacity-40");
+  });
+
+  it("does not fade recently disconnected participants", () => {
+    const now = Date.now();
+    const participants = [
+      makeParticipant({
+        participantId: "p2",
+        name: "Bob",
+        connected: false,
+        lastSeenAt: now - 10_000,
+      }),
+    ];
+    const { container } = render(
+      <ParticipantList {...defaultProps} participants={participants} />
+    );
+    expect(container.querySelector("li")).not.toHaveClass("opacity-40");
+  });
+
   it("does not allow poking after reveal", () => {
     const onPoke = vi.fn();
     const participants = [

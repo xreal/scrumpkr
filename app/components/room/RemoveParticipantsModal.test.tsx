@@ -70,7 +70,7 @@ describe("RemoveParticipantsModal", () => {
     expect(screen.getByText(/bob.*inactive/i)).toBeInTheDocument();
   });
 
-  it("calls onRemove with correct participantId and onClose when Remove is clicked", () => {
+  it("removes multiple selected participants and closes modal", () => {
     const onRemove = vi.fn();
     const onClose = vi.fn();
     render(
@@ -80,9 +80,18 @@ describe("RemoveParticipantsModal", () => {
         onClose={onClose}
       />
     );
-    fireEvent.click(screen.getAllByRole("button", { name: /remove/i })[0]);
-    expect(onRemove).toHaveBeenCalledWith("p2");
+
+    fireEvent.click(screen.getByLabelText(/bob/i));
+    fireEvent.click(screen.getByLabelText(/carol/i));
+    fireEvent.click(screen.getByRole("button", { name: /remove selected \(2\)/i }));
+
+    expect(onRemove).toHaveBeenCalledWith(["p2", "p3"]);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps remove button disabled until a participant is selected", () => {
+    render(<RemoveParticipantsModal {...defaultProps} />);
+    expect(screen.getByRole("button", { name: /remove selected$/i })).toBeDisabled();
   });
 
   it("calls onClose when close button is clicked", () => {

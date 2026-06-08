@@ -74,8 +74,10 @@ app/lib/                # Types, storage helpers, deck config, pure logic
 - Stateless worker layer scales infinitely.
 - Durable Objects isolate rooms — no cross-room queries.
 - WebSocket hibernation keeps idle rooms near-zero cost.
-- Keep DO storage small (< 1MB). History capped at 10 entries. Prune stale participants (30-day TTL).
+- Keep DO storage small (< 1MB). History capped at 10 entries. Prune stale participants (8-hour offline TTL).
 - Avoid Cron. Avoid external APIs. Avoid heavy computation in DO.
+
+---
 
 ## Durable Object Rules (keep this generic)
 - **One DO = one coordination atom**: Model by room/session/entity. Never create one global DO for all traffic.
@@ -91,6 +93,42 @@ app/lib/                # Types, storage helpers, deck config, pure logic
 - [Create Durable Object Stubs and Send Requests](https://developers.cloudflare.com/durable-objects/best-practices/create-durable-object-stubs-and-send-requests/)
 - [Access Durable Objects Storage](https://developers.cloudflare.com/durable-objects/best-practices/access-durable-objects-storage/)
 - [WebSockets in Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/websockets/)
+
+---
+
+## Tailwind v4
+Basic Usage
+- Use Tailwind CSS classes to style HTML. Check and follow existing Tailwind conventions in the project before introducing new patterns.
+- Offer to extract repeated patterns into small tsx components.
+- Consider class placement, order, priority, and defaults. Remove redundant classes, add classes to parent or child elements carefully to reduce repetition, and group elements logically.
+
+### Tailwind CSS v4 Specifics
+Always use Tailwind CSS v4 and avoid deprecated utilities.
+`corePlugins` is not supported in Tailwind v4.
+CSS-First Configuration
+In Tailwind v4, configuration is CSS-first using the `@theme` directive — no separate tailwind.config.js file is needed:
+
+Replaced Utilities
+Tailwind v4 removed deprecated utilities. Use the replacements shown below. Opacity values remain numeric.
+
+### Deprecated	Replacement
+bg-opacity-*	bg-black/*
+text-opacity-*	text-black/*
+border-opacity-*	border-black/*
+divide-opacity-*	divide-black/*
+ring-opacity-*	ring-black/*
+placeholder-opacity-*	placeholder-black/*
+flex-shrink-*	shrink-*
+flex-grow-*	grow-*
+overflow-ellipsis	text-ellipsis
+decoration-slice	box-decoration-slice
+decoration-clone	box-decoration-clone
+
+### Common Pitfalls with Tailwind
+Using deprecated v3 utilities (bg-opacity-, flex-shrink-, etc.)
+Using margins for spacing between siblings instead of gap utilities
+
+---
 
 ## Development Workflow
 - `pnpm dev` — local dev with Miniflare. **Managed by the user — do not run**, it may already be active.
