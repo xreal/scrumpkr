@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import type { ParticipantMode } from "~/hooks/useRoomIdentity";
+import type { ParticipantViewMode } from "~/lib/participant-view-mode";
+import { toServerMode } from "~/lib/participant-view-mode";
 import type { CardValue } from "~/lib/deck";
 import type { ClientMessage } from "~/lib/types";
 
@@ -10,17 +11,18 @@ interface UseRoomActionsParams {
   send: (msg: ClientMessage) => void;
   setMyVote: (vote: string | null) => void;
   updateName: (newName: string) => string | null;
-  updateMode: (newMode: ParticipantMode) => void;
+  updateViewMode: (newMode: ParticipantViewMode) => void;
   navigate: (to: string) => void;
 }
 
 interface UseRoomActionsResult {
   handleVote: (value: CardValue) => void;
+  handleClearVote: () => void;
   handleReveal: () => void;
   handleReset: () => void;
   handleClearHistory: () => void;
   handleSetName: (newName: string) => void;
-  handleSetMode: (newMode: ParticipantMode) => void;
+  handleSetViewMode: (newMode: ParticipantViewMode) => void;
   handleSetTitle: (title: string) => void;
   handleRemoveParticipants: (removeIds: string[]) => void;
   handleSendPoke: (targetId: string) => void;
@@ -34,7 +36,7 @@ export function useRoomActions({
   send,
   setMyVote,
   updateName,
-  updateMode,
+  updateViewMode,
   navigate,
 }: UseRoomActionsParams): UseRoomActionsResult {
   const handleVote = useCallback(
@@ -49,6 +51,15 @@ export function useRoomActions({
     },
     [myId, isRoundRevealed, myVote, setMyVote, send]
   );
+
+  const handleClearVote = useCallback(() => {
+    if (!myId || isRoundRevealed || myVote === null) {
+      return;
+    }
+
+    setMyVote(null);
+    send({ action: "vote", participantId: myId, vote: null });
+  }, [myId, isRoundRevealed, myVote, setMyVote, send]);
 
   const handleReveal = useCallback(() => {
     if (!myId) {
@@ -91,16 +102,16 @@ export function useRoomActions({
     [myId, updateName, send]
   );
 
-  const handleSetMode = useCallback(
-    (newMode: ParticipantMode) => {
+  const handleSetViewMode = useCallback(
+    (newMode: ParticipantViewMode) => {
       if (!myId) {
         return;
       }
 
-      updateMode(newMode);
-      send({ action: "set_mode", participantId: myId, mode: newMode });
+      updateViewMode(newMode);
+      send({ action: "set_mode", participantId: myId, mode: toServerMode(newMode) });
     },
-    [myId, updateMode, send]
+    [myId, updateViewMode, send]
   );
 
   const handleSetTitle = useCallback(
@@ -145,11 +156,12 @@ export function useRoomActions({
 
   return {
     handleVote,
+    handleClearVote,
     handleReveal,
     handleReset,
     handleClearHistory,
     handleSetName,
-    handleSetMode,
+    handleSetViewMode,
     handleSetTitle,
     handleRemoveParticipants,
     handleSendPoke,

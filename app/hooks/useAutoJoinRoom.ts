@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Room } from "~/lib/types";
-import type { ParticipantMode } from "~/hooks/useRoomIdentity";
+import type { ServerParticipantMode } from "~/hooks/useRoomIdentity";
 
 interface UseAutoJoinRoomParams {
   roomId?: string;
@@ -10,12 +10,12 @@ interface UseAutoJoinRoomParams {
   identityLoaded: boolean;
   nameConfirmed: boolean;
   name: string;
-  mode: ParticipantMode;
+  serverMode: ServerParticipantMode;
   send: (msg: {
     action: "join";
     participantId: string;
     name: string;
-    mode: ParticipantMode;
+    mode: ServerParticipantMode;
   }) => void;
 }
 
@@ -27,7 +27,7 @@ export function useAutoJoinRoom({
   identityLoaded,
   nameConfirmed,
   name,
-  mode,
+  serverMode,
   send,
 }: UseAutoJoinRoomParams): void {
   const [joinRequested, setJoinRequested] = useState(false);
@@ -60,7 +60,7 @@ export function useAutoJoinRoom({
       return;
     }
 
-    send({ action: "join", participantId: myId, name: trimmedName, mode });
+    send({ action: "join", participantId: myId, name: trimmedName, mode: serverMode });
     setJoinRequested(true);
   }, [
     room,
@@ -69,7 +69,7 @@ export function useAutoJoinRoom({
     identityLoaded,
     nameConfirmed,
     name,
-    mode,
+    serverMode,
     joinRequested,
     send,
   ]);

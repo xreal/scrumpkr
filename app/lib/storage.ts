@@ -1,3 +1,5 @@
+import type { ParticipantViewMode } from "./participant-view-mode";
+
 const KEYS = {
   participantIdByRoom: "scrumpkr:room:participantId:",
   participantTokenByRoom: "scrumpkr:room:participantToken:",
@@ -69,20 +71,21 @@ export function setLastRoom(roomId: string): void {
   setLocal(KEYS.lastRoom, roomId);
 }
 
-export function getPreferredMode(roomId?: string | null):
-  | "voter"
-  | "spectator"
-  | null {
-  if (roomId) {
-    return getLocal(roomKey(KEYS.preferredModeByRoom, roomId)) as
-      | "voter"
-      | "spectator"
-      | null;
+function normalizePreferredMode(raw: string | null): ParticipantViewMode | null {
+  if (raw === "voter" || raw === "presenter" || raw === "spectator") {
+    return raw;
   }
-  return getLocal(KEYS.preferredMode) as "voter" | "spectator" | null;
+  return null;
 }
 
-export function setPreferredMode(mode: "voter" | "spectator", roomId?: string | null): void {
+export function getPreferredMode(roomId?: string | null): ParticipantViewMode | null {
+  if (roomId) {
+    return normalizePreferredMode(getLocal(roomKey(KEYS.preferredModeByRoom, roomId)));
+  }
+  return normalizePreferredMode(getLocal(KEYS.preferredMode));
+}
+
+export function setPreferredMode(mode: ParticipantViewMode, roomId?: string | null): void {
   if (roomId) {
     setLocal(roomKey(KEYS.preferredModeByRoom, roomId), mode);
     return;

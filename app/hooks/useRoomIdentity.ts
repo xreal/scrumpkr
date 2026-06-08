@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import type { ParticipantViewMode } from "~/lib/participant-view-mode";
+import { toServerMode } from "~/lib/participant-view-mode";
 import {
   getDisplayName,
   getPreferredMode,
@@ -6,18 +8,19 @@ import {
   setPreferredMode,
 } from "~/lib/storage";
 
-type ParticipantMode = "voter" | "spectator";
+type ServerParticipantMode = ReturnType<typeof toServerMode>;
 
 interface UseRoomIdentityResult {
   name: string;
   nameInput: string;
-  mode: ParticipantMode;
+  viewMode: ParticipantViewMode;
+  serverMode: ServerParticipantMode;
   identityLoaded: boolean;
   nameConfirmed: boolean;
   setNameInput: (value: string) => void;
   confirmName: () => boolean;
   updateName: (newName: string) => string | null;
-  updateMode: (newMode: ParticipantMode) => void;
+  updateViewMode: (newMode: ParticipantViewMode) => void;
   syncFromParticipantName: (participantName?: string) => void;
 }
 
@@ -28,7 +31,7 @@ function normalizeName(rawName: string): string {
 export function useRoomIdentity(roomId?: string): UseRoomIdentityResult {
   const [name, setName] = useState("");
   const [nameInput, setNameInput] = useState("");
-  const [mode, setMode] = useState<ParticipantMode>("voter");
+  const [viewMode, setViewMode] = useState<ParticipantViewMode>("voter");
   const [identityLoaded, setIdentityLoaded] = useState(false);
   const [nameConfirmed, setNameConfirmed] = useState(false);
 
@@ -37,7 +40,7 @@ export function useRoomIdentity(roomId?: string): UseRoomIdentityResult {
     setName("");
     setNameInput("");
     setNameConfirmed(false);
-    setMode("voter");
+    setViewMode("voter");
 
     const storedName = getDisplayName(roomId || null);
     if (storedName) {
@@ -48,7 +51,7 @@ export function useRoomIdentity(roomId?: string): UseRoomIdentityResult {
 
     const storedMode = getPreferredMode(roomId || null);
     if (storedMode) {
-      setMode(storedMode);
+      setViewMode(storedMode);
     }
 
     setIdentityLoaded(true);
@@ -81,9 +84,9 @@ export function useRoomIdentity(roomId?: string): UseRoomIdentityResult {
     [roomId]
   );
 
-  const updateMode = useCallback(
-    (newMode: ParticipantMode) => {
-      setMode(newMode);
+  const updateViewMode = useCallback(
+    (newMode: ParticipantViewMode) => {
+      setViewMode(newMode);
       setPreferredMode(newMode, roomId || null);
     },
     [roomId]
@@ -101,15 +104,16 @@ export function useRoomIdentity(roomId?: string): UseRoomIdentityResult {
   return {
     name,
     nameInput,
-    mode,
+    viewMode,
+    serverMode: toServerMode(viewMode),
     identityLoaded,
     nameConfirmed,
     setNameInput,
     confirmName,
     updateName,
-    updateMode,
+    updateViewMode,
     syncFromParticipantName,
   };
 }
 
-export type { ParticipantMode };
+export type { ParticipantViewMode, ServerParticipantMode };

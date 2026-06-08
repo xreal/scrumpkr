@@ -6,12 +6,13 @@ import { ParticipantList } from "~/components/room/ParticipantList";
 import { RemoveParticipantsModal } from "~/components/room/RemoveParticipantsModal";
 import { RevealHistory } from "~/components/room/RevealHistory";
 import { RoomHeader } from "~/components/room/RoomHeader";
-import { SpectatorToggle } from "~/components/room/SpectatorToggle";
+import { ParticipantModeSelector } from "~/components/room/ParticipantModeSelector";
+import { PresenterVoting } from "~/components/room/PresenterVoting";
 import { VoteResult } from "~/components/room/VoteResult";
 import { VotingCard } from "~/components/room/VotingCard";
 import { useAutoJoinRoom } from "~/hooks/useAutoJoinRoom";
 import { useRoomExistence } from "~/hooks/useRoomExistence";
-import { useRoomIdentity, type ParticipantMode } from "~/hooks/useRoomIdentity";
+import { useRoomIdentity, type ParticipantViewMode } from "~/hooks/useRoomIdentity";
 import { useRoomPokeFeedback } from "~/hooks/useRoomPokeFeedback";
 import { useRoomActions } from "~/hooks/useRoomActions";
 import { useWebSocket } from "~/hooks/useWebSocket";
@@ -144,13 +145,14 @@ export default function Room() {
   const {
     name,
     nameInput,
-    mode,
+    viewMode,
+    serverMode,
     identityLoaded,
     nameConfirmed,
     setNameInput,
     confirmName,
     updateName,
-    updateMode,
+    updateViewMode,
     syncFromParticipantName,
   } = useRoomIdentity(roomId);
 
@@ -158,7 +160,8 @@ export default function Room() {
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
 
   const me = room?.participants.find((participant) => participant.participantId === myId);
-  const activeMode: ParticipantMode = me?.mode || mode;
+  const activeViewMode: ParticipantViewMode =
+    me?.mode === "spectator" ? "spectator" : viewMode;
 
   useEffect(() => {
     setMyVote(null);
@@ -176,7 +179,7 @@ export default function Room() {
     identityLoaded,
     nameConfirmed,
     name,
-    mode,
+    serverMode,
     send,
   });
 
@@ -202,11 +205,12 @@ export default function Room() {
 
   const {
     handleVote,
+    handleClearVote,
     handleReveal,
     handleReset,
     handleClearHistory,
     handleSetName,
-    handleSetMode,
+    handleSetViewMode,
     handleSetTitle,
     handleRemoveParticipants,
     handleSendPoke,
@@ -218,7 +222,7 @@ export default function Room() {
     send,
     setMyVote,
     updateName,
-    updateMode,
+    updateViewMode,
     navigate,
   });
 
@@ -310,10 +314,22 @@ export default function Room() {
             <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
               Your Estimate
             </h2>
-            <SpectatorToggle mode={activeMode} onToggle={handleSetMode} />
+            <ParticipantModeSelector mode={activeViewMode} onChange={handleSetViewMode} />
           </div>
 
-          {activeMode === "voter" ? (
+          {activeViewMode === "spectator" ? (
+            <p className="text-base font-medium text-gray-500">
+              You are watching as a spectator.
+            </p>
+          ) : activeViewMode === "presenter" ? (
+            <PresenterVoting
+              revealed={room.currentRound.revealed}
+              hasVoted={myVote !== null}
+              myVote={myVote}
+              onVote={handleVote}
+              onClearVote={handleClearVote}
+            />
+          ) : (
             <div className="grid grid-cols-5 gap-2 sm:gap-3">
               {DECK.map((card) => (
                 <VotingCard
@@ -325,10 +341,6 @@ export default function Room() {
                 />
               ))}
             </div>
-          ) : (
-            <p className="text-base font-medium text-gray-500">
-              You are watching as a spectator.
-            </p>
           )}
 
           <div className="lg:hidden">
